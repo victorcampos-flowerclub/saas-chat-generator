@@ -213,11 +213,11 @@
         .modal-content {
             background: white;
             width: 90%;
-            max-width: 600px;
-            margin: 50px auto;
+            max-width: 700px;
+            margin: 30px auto;
             border-radius: 12px;
             padding: 30px;
-            max-height: 80vh;
+            max-height: 85vh;
             overflow-y: auto;
         }
         
@@ -297,6 +297,92 @@
             color: #dc2626;
             border: 1px solid #fecaca;
         }
+        
+        .upload-area {
+            border: 2px dashed #d1d5db;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+        
+        .upload-area:hover {
+            border-color: #4f46e5;
+        }
+        
+        .upload-area.dragover {
+            border-color: #4f46e5;
+            background: #f0f9ff;
+        }
+        
+        .file-list {
+            margin-top: 15px;
+        }
+        
+        .file-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px;
+            background: #f9fafb;
+            border-radius: 4px;
+            margin-bottom: 8px;
+        }
+        
+        .file-remove {
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        
+        .ai-section {
+            background: #fef3c7;
+            border: 1px solid #f59e0b;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .ai-section h4 {
+            color: #92400e;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .tab-buttons {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+        
+        .tab-button {
+            padding: 12px 20px;
+            background: none;
+            border: none;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            font-weight: 500;
+        }
+        
+        .tab-button.active {
+            border-bottom-color: #4f46e5;
+            color: #4f46e5;
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -361,87 +447,144 @@
     <div class="modal" id="createModal">
         <div class="modal-content">
             <div class="modal-header">
-                <h3>Criar Novo Chat</h3>
+                <h3>Criar Novo Chat com IA</h3>
                 <button class="close" onclick="closeCreateModal()">&times;</button>
             </div>
             
+            <!-- Tabs -->
+            <div class="tab-buttons">
+                <button class="tab-button active" onclick="switchTab('config')">1. Configuração</button>
+                <button class="tab-button" onclick="switchTab('documents')">2. Documentos</button>
+                <button class="tab-button" onclick="switchTab('prompt')">3. Prompt IA</button>
+            </div>
+            
             <form id="createChatForm">
-                <div class="form-group">
-                    <label for="chatName">Nome do Chat</label>
-                    <input type="text" id="chatName" placeholder="Ex: Atendimento ao Cliente" required>
-                </div>
-                
-                <div class="form-row">
+                <!-- Tab 1: Configuração -->
+                <div class="tab-content active" id="configTab">
                     <div class="form-group">
-                        <label for="chatType">Tipo do Chat</label>
-                        <select id="chatType" required>
-                            <option value="">Selecione...</option>
-                            <option value="assistant">Assistente Geral</option>
-                            <option value="support">Suporte/Atendimento</option>
-                            <option value="sales">Vendas</option>
-                            <option value="custom">Personalizado</option>
-                        </select>
+                        <label for="chatName">Nome do Chat</label>
+                        <input type="text" id="chatName" placeholder="Ex: Atendimento ao Cliente" required>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="chatType">Tipo do Chat</label>
+                            <select id="chatType" required>
+                                <option value="">Selecione...</option>
+                                <option value="assistant">Assistente Geral</option>
+                                <option value="support">Suporte/Atendimento</option>
+                                <option value="sales">Vendas</option>
+                                <option value="custom">Personalizado</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="personality">Personalidade</label>
+                            <select id="personality" required>
+                                <option value="professional">Profissional</option>
+                                <option value="friendly">Amigável</option>
+                                <option value="formal">Formal</option>
+                                <option value="casual">Casual</option>
+                            </select>
+                        </div>
                     </div>
                     
                     <div class="form-group">
-                        <label for="personality">Personalidade</label>
-                        <select id="personality" required>
-                            <option value="professional">Profissional</option>
-                            <option value="friendly">Amigável</option>
-                            <option value="formal">Formal</option>
-                            <option value="casual">Casual</option>
-                        </select>
+                        <label for="chatDescription">Descrição (Opcional)</label>
+                        <textarea id="chatDescription" placeholder="Descreva o propósito deste chat..."></textarea>
+                    </div>
+                    
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="claudeModel">Modelo Claude</label>
+                            <select id="claudeModel">
+                                <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
+                                <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
+                            </select>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label for="maxTokens">Max Tokens</label>
+                            <input type="number" id="maxTokens" value="1500" min="100" max="4000">
+                        </div>
+                    </div>
+                    
+                    <div style="text-align: right; margin-top: 20px;">
+                        <button type="button" class="btn" onclick="switchTab('documents')">Próximo: Documentos →</button>
                     </div>
                 </div>
                 
-                <div class="form-group">
-                    <label for="chatDescription">Descrição (Opcional)</label>
-                    <textarea id="chatDescription" placeholder="Descreva o propósito deste chat..."></textarea>
+                <!-- Tab 2: Documentos -->
+                <div class="tab-content" id="documentsTab">
+                    <div class="ai-section">
+                        <h4>🤖 Inteligência Artificial</h4>
+                        <p>Faça upload de documentos para que a IA crie automaticamente o prompt perfeito para seu chatbot!</p>
+                    </div>
+                    
+                    <div class="upload-area" onclick="document.getElementById('documentFiles').click()">
+                        <div style="font-size: 24px; margin-bottom: 10px;">📄</div>
+                        <p><strong>Clique ou arraste arquivos aqui</strong></p>
+                        <small>PDF, TXT, MD, JSON, CSV (máximo 10MB cada)</small>
+                        <input type="file" id="documentFiles" style="display: none;" accept=".pdf,.txt,.md,.json,.csv" multiple>
+                    </div>
+                    
+                    <div class="file-list" id="fileList"></div>
+                    
+                    <div style="display: flex; gap: 15px; justify-content: space-between; margin-top: 20px;">
+                        <button type="button" class="btn btn-secondary" onclick="switchTab('config')">← Voltar</button>
+                        <button type="button" class="btn" onclick="switchTab('prompt')">Próximo: Gerar Prompt →</button>
+                    </div>
                 </div>
                 
-                <div class="form-group">
-                    <label for="systemPrompt">Prompt do Sistema</label>
-                    <textarea id="systemPrompt" placeholder="Você é um assistente especializado em..." required></textarea>
-                </div>
-                
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="claudeModel">Modelo Claude</label>
-                        <select id="claudeModel">
-                            <option value="claude-sonnet-4-20250514">Claude Sonnet 4</option>
-                            <option value="claude-3-haiku-20240307">Claude 3 Haiku</option>
-                        </select>
+                <!-- Tab 3: Prompt IA -->
+                <div class="tab-content" id="promptTab">
+                    <div class="ai-section">
+                        <h4>🧠 Prompt Gerado pela IA</h4>
+                        <p>Baseado nas suas configurações e documentos, a IA criará o prompt perfeito!</p>
                     </div>
                     
                     <div class="form-group">
-                        <label for="maxTokens">Max Tokens</label>
-                        <input type="number" id="maxTokens" value="1500" min="100" max="4000">
+                        <label for="systemPrompt">Prompt do Sistema</label>
+                        <textarea id="systemPrompt" placeholder="Clique em 'Gerar Prompt com IA' para criar automaticamente..." required></textarea>
                     </div>
-                </div>
-                
-                <div style="display: flex; gap: 15px; justify-content: flex-end; margin-top: 20px;">
-                    <button type="button" class="btn btn-secondary" onclick="closeCreateModal()">Cancelar</button>
-                    <button type="submit" class="btn">Criar Chat</button>
+                    
+                    <div style="text-align: center; margin-bottom: 20px;">
+                        <button type="button" class="btn btn-success" onclick="generateAIPrompt()">
+                            🤖 Gerar Prompt com IA
+                        </button>
+                    </div>
+                    
+                    <div style="display: flex; gap: 15px; justify-content: space-between;">
+                        <div style="display: flex; gap: 15px;">
+                            <button type="button" class="btn btn-secondary" onclick="switchTab('documents')">← Voltar</button>
+                            <button type="button" class="btn btn-secondary" onclick="closeCreateModal()">Cancelar</button>
+                        </div>
+                        <button type="submit" class="btn">Criar Chat</button>
+                    </div>
                 </div>
             </form>
         </div>
     </div>
     
     <script>
-        // URLs dos serviços - CORRETAS E ATUALIZADAS
+        // URLs dos serviços
         const BACKEND_URL = 'https://saas-chat-backend-365442086139.us-east1.run.app';
-        const ENGINE_URL = 'https://saas-chat-engine-zyzjkxq7ca-ue.a.run.app';
+        const ENGINE_URL = 'https://saas-chat-engine-365442086139.us-east1.run.app';
         
         let authToken = '';
         let currentUser = {};
         let userChats = [];
+        let selectedFiles = [];
+        let currentTab = 'config';
+        let tempChatId = null;
         
         // Inicializar dashboard
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🚀 Dashboard iniciado - versão limpa');
+            console.log('🚀 Dashboard iniciado com IA');
             checkAuth();
             loadUserData();
             loadChats();
+            setupFileUpload();
         });
         
         function checkAuth() {
@@ -486,7 +629,7 @@
                 console.log('📨 Chats recebidos:', data);
                 
                 if (data.success) {
-                    userChats = data.chats;
+                    userChats = data.chats.filter(chat => chat.chat_type !== 'temp'); // Filtrar chats temporários
                     updateStats();
                     renderChats();
                 } else {
@@ -552,22 +695,242 @@
             `).join('');
         }
         
-        // FUNÇÕES PRINCIPAIS - LIMPAS E FUNCIONAIS
+        // FUNÇÕES DE TABS
+        function switchTab(tabName) {
+            // Atualizar botões
+            document.querySelectorAll('.tab-button').forEach(btn => btn.classList.remove('active'));
+            document.querySelector(`.tab-button[onclick="switchTab('${tabName}')"]`).classList.add('active');
+            
+            // Atualizar conteúdo
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            document.getElementById(`${tabName}Tab`).classList.add('active');
+            
+            currentTab = tabName;
+        }
         
+        // UPLOAD DE ARQUIVOS
+        function setupFileUpload() {
+            const fileInput = document.getElementById('documentFiles');
+            const uploadArea = document.querySelector('.upload-area');
+            
+            fileInput.addEventListener('change', handleFileSelect);
+            
+            // Drag and drop
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.classList.add('dragover');
+            });
+            
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.classList.remove('dragover');
+            });
+            
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.classList.remove('dragover');
+                const files = Array.from(e.dataTransfer.files);
+                handleFiles(files);
+            });
+        }
+        
+        function handleFileSelect(event) {
+            const files = Array.from(event.target.files);
+            handleFiles(files);
+        }
+        
+        async function handleFiles(files) {
+            // Criar chat temporário se não existir
+            if (!tempChatId) {
+                await createTempChat();
+            }
+            
+            if (!tempChatId) {
+                showAlert('Erro ao criar chat temporário', 'error');
+                return;
+            }
+            
+            for (const file of files) {
+                if (file.size > 10 * 1024 * 1024) {
+                    showAlert(`Arquivo ${file.name} muito grande (máximo 10MB)`, 'error');
+                    continue;
+                }
+                
+                const allowedTypes = ['application/pdf', 'text/plain', 'text/markdown', 'application/json', 'text/csv'];
+                if (!allowedTypes.includes(file.type)) {
+                    showAlert(`Tipo de arquivo não suportado: ${file.name}`, 'error');
+                    continue;
+                }
+                
+                // Upload imediato
+                await uploadFileToTemp(file);
+            }
+            
+            // Recarregar lista
+            await loadTempDocuments();
+        }
+        
+        async function createTempChat() {
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/chats/temp`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    tempChatId = data.temp_chat_id;
+                    console.log('✅ Chat temporário criado:', tempChatId);
+                }
+            } catch (error) {
+                console.error('Erro ao criar chat temporário:', error);
+            }
+        }
+        
+        async function uploadFileToTemp(file) {
+            if (!tempChatId) return;
+            
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            showAlert(`📄 Enviando ${file.name}...`, 'success');
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/chats/${tempChatId}/documents`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: formData
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    showAlert(`✅ ${file.name} enviado!`, 'success');
+                    selectedFiles.push({
+                        name: file.name,
+                        size: file.size,
+                        document_id: data.document_id
+                    });
+                } else {
+                    showAlert(`❌ Erro ao enviar ${file.name}: ${data.error}`, 'error');
+                }
+            } catch (error) {
+                showAlert(`❌ Erro ao enviar ${file.name}`, 'error');
+            }
+        }
+        
+        async function loadTempDocuments() {
+            if (!tempChatId) return;
+            
+            try {
+                const response = await fetch(`${BACKEND_URL}/api/chats/${tempChatId}/documents`, {
+                    headers: {
+                        'Authorization': `Bearer ${authToken}`
+                    }
+                });
+                
+                const data = await response.json();
+                if (data.success) {
+                    selectedFiles = data.documents.map(doc => ({
+                        name: doc.filename,
+                        size: doc.file_size,
+                        document_id: doc.document_id
+                    }));
+                    renderFileList();
+                }
+            } catch (error) {
+                console.error('Erro ao carregar documentos temporários:', error);
+            }
+        }
+        
+        function renderFileList() {
+            const fileList = document.getElementById('fileList');
+            
+            if (selectedFiles.length === 0) {
+                fileList.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 20px;">Nenhum documento adicionado ainda.</p>';
+                return;
+            }
+            
+            fileList.innerHTML = selectedFiles.map((file, index) => `
+                <div class="file-item">
+                    <span>📄 ${file.name} (${(file.size / 1024).toFixed(1)}KB)</span>
+                    <button class="file-remove" onclick="removeFile(${index})">Remover</button>
+                </div>
+            `).join('');
+        }
+        
+        async function removeFile(index) {
+            const file = selectedFiles[index];
+            
+            if (tempChatId && file.document_id) {
+                try {
+                    await fetch(`${BACKEND_URL}/api/chats/${tempChatId}/documents/${file.document_id}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`
+                        }
+                    });
+                } catch (error) {
+                    console.error('Erro ao remover arquivo:', error);
+                }
+            }
+            
+            selectedFiles.splice(index, 1);
+            renderFileList();
+        }
+        
+        // GERAR PROMPT COM IA
+        async function generateAIPrompt() {
+            if (!tempChatId) {
+                showAlert('Erro: Faça upload de documentos primeiro', 'error');
+                return;
+            }
+            
+            const generateBtn = document.querySelector('button[onclick="generateAIPrompt()"]');
+            const originalText = generateBtn.textContent;
+            generateBtn.textContent = '🤖 Analisando documentos...';
+            generateBtn.disabled = true;
+            
+            try {
+                const chatConfig = {
+                    chat_name: document.getElementById('chatName').value,
+                    chat_type: document.getElementById('chatType').value,
+                    personality: document.getElementById('personality').value,
+                    chat_description: document.getElementById('chatDescription').value
+                };
+                
+                const response = await fetch(`${BACKEND_URL}/api/chats/${tempChatId}/generate-prompt`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify(chatConfig)
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    document.getElementById('systemPrompt').value = data.optimized_prompt;
+                    showAlert('✅ Prompt gerado com IA baseado nos seus documentos!', 'success');
+                } else {
+                    showAlert('❌ Erro ao gerar prompt: ' + data.error, 'error');
+                }
+            } catch (error) {
+                showAlert('❌ Erro de conexão', 'error');
+            }
+            
+            generateBtn.textContent = originalText;
+            generateBtn.disabled = false;
+        }
+        
+        // FUNÇÕES PRINCIPAIS
         function openChat(chatId) {
             console.log('💬 Abrindo chat:', chatId);
             const chatUrl = `${ENGINE_URL}/chat/${chatId}`;
-            showAlert('🔄 Abrindo chat...', 'success');
-            
-            const newWindow = window.open(chatUrl, '_blank');
-            
-            if (newWindow) {
-                setTimeout(() => {
-                    showAlert('✅ Chat aberto!', 'success');
-                }, 1000);
-            } else {
-                showAlert('❌ Permita popups', 'error');
-            }
+            window.open(chatUrl, '_blank');
         }
         
         function manageChat(chatId) {
@@ -587,18 +950,35 @@
         }
         
         // MODAL
-        
-        function openCreateModal() {
+        async function openCreateModal() {
             document.getElementById('createModal').style.display = 'block';
+            switchTab('config');
+            await createTempChat(); // Criar chat temporário ao abrir modal
         }
         
-        function closeCreateModal() {
+        async function closeCreateModal() {
             document.getElementById('createModal').style.display = 'none';
             document.getElementById('createChatForm').reset();
+            selectedFiles = [];
+            renderFileList();
+            
+            // Limpar chat temporário
+            if (tempChatId) {
+                try {
+                    await fetch(`${BACKEND_URL}/api/chats/temp/${tempChatId}`, {
+                        method: 'DELETE',
+                        headers: {
+                            'Authorization': `Bearer ${authToken}`
+                        }
+                    });
+                } catch (error) {
+                    console.error('Erro ao limpar chat temporário:', error);
+                }
+                tempChatId = null;
+            }
         }
         
         // CRIAR CHAT
-        
         document.getElementById('createChatForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -609,10 +989,11 @@
                 chat_description: document.getElementById('chatDescription').value,
                 system_prompt: document.getElementById('systemPrompt').value,
                 claude_model: document.getElementById('claudeModel').value,
-                max_tokens: parseInt(document.getElementById('maxTokens').value)
+                max_tokens: parseInt(document.getElementById('maxTokens').value),
+                temp_chat_id: tempChatId // Enviar ID do chat temporário
             };
             
-            console.log('📝 Criando:', formData);
+            console.log('📝 Criando chat com documentos:', formData);
             
             try {
                 const response = await fetch(`${BACKEND_URL}/api/chats`, {
@@ -627,7 +1008,7 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    showAlert('✅ Chat criado!', 'success');
+                    showAlert('✅ Chat criado com sucesso!', 'success');
                     closeCreateModal();
                     loadChats();
                 } else {
@@ -639,7 +1020,6 @@
         });
         
         // UTILS
-        
         function showAlert(message, type = 'error') {
             const alert = document.getElementById('alert');
             alert.textContent = message;
