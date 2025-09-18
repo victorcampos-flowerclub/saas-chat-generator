@@ -289,12 +289,13 @@ if KNOWLEDGE_BASE_ENABLED:
                 return jsonify({'success': False, 'error': 'Arquivo vazio'}), 400
             
             file_data = file.read()
-            result = knowledge_service.upload_document(
-                chat_id=chat_id,
-                file_data=file_data,
-                filename=file.filename,
-                content_type=file.content_type
-            )
+        result = knowledge_service.upload_document(
+            chat_id=chat_id,
+            file_data=file_data,
+            filename=file.filename,
+            content_type=file.content_type,
+            user_id=user_id
+        )
             
             if result['success']:
                 return jsonify(result), 201
