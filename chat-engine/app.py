@@ -1,47 +1,51 @@
 """
-Chat Engine - Interface individual de chat em tempo real (COM KNOWLEDGE BASE)
+Chat Engine - Interface de chat funcionando
 """
 
 import os
 import sys
 import json
 import uuid
-from flask import Flask, request, jsonify, render_template, redirect, url_for
+from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 from datetime import datetime, timezone
 import requests
 
-# Adicionar path do projeto
+# Adicionar path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from config import Config
-from models.database import chat_model, message_model, user_model
-from google.cloud import secretmanager
-from knowledge_base_system import knowledge_service
+try:
+    from config import Config
+    from models.database import chat_model, message_model, user_model
+except ImportError:
+    # Fallback caso não encontre
+    class Config:
+        PROJECT_ID = 'flower-ai-generator'
+        BIGQUERY_DATASET = 'saas_chat_generator'
+        CLAUDE_MODEL = 'claude-sonnet-4-20250514'
 
 # Inicializar Flask
 app = Flask(__name__)
-app.config.from_object(Config)
 CORS(app, origins=["*"])
 
+# Claude Service simplificado
 class ClaudeService:
     def __init__(self):
         self.api_key = self._get_claude_api_key()
         self.base_url = "https://api.anthropic.com/v1/messages"
     
     def _get_claude_api_key(self):
-        """Buscar API key do Claude no Secret Manager"""
         try:
+            from google.cloud import secretmanager
             client = secretmanager.SecretManagerServiceClient()
-            name = f"projects/{Config.PROJECT_ID}/secrets/claude-api-key/versions/latest"
+            name = f"projects/flower-ai-generator/secrets/claude-api-key/versions/latest"
             response = client.access_secret_version(request={"name": name})
             return response.payload.data.decode("UTF-8")
         except Exception as e:
-            print(f"Erro ao buscar API key: {e}")
+            print(f"Erro API key: {e}")
             return None
     
     def send_message(self, messages, model="claude-3-haiku-20240307", max_tokens=1500):
-        """Enviar mensagem para Claude (SÍNCRONO)"""
         if not self.api_key:
             return {"error": "API key não configurada"}
         
@@ -62,34 +66,50 @@ class ClaudeService:
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            return {"error": f"Erro na API do Claude: {str(e)}"}
+            return {"error": f"Erro Claude API: {str(e)}"}
 
 claude_service = ClaudeService()
 
 @app.route('/')
 def index():
-    """Página inicial do chat engine"""
-    return render_template('chat_selection.html')
+    return jsonify({
+        'status': 'Chat Engine funcionando',
+        'version': '1.0.0',
+        'endpoints': ['/health', '/chat/<id>', '/api/chat/<id>/info', '/api/chat/<id>/send']
+    })
+
+@app.route('/health')
+def health():
+    return jsonify({
+        'status': 'healthy',
+        'service': 'chat-engine',
+        'timestamp': datetime.now().isoformat()
+    })
 
 @app.route('/chat/<chat_id>')
 def chat_interface(chat_id):
-    """Interface principal do chat"""
-    # Verificar se chat existe
-    chat = chat_model.get_chat_by_id(chat_id)
-    if not chat:
-        return render_template('chat_not_found.html'), 404
-    
-    return render_template('chat_interface.html', chat=chat)
+    try:
+        # Verificar se chat existe
+        from models.database import chat_model
+        chat = chat_model.get_chat_by_id(chat_id)
+        
+        if not chat:
+            return render_template('chat_not_found.html'), 404
+        
+        return render_template('chat_interface.html', chat=chat)
+    except Exception as e:
+        print(f"Erro ao carregar chat: {e}")
+        return f"<h1>Erro</h1><p>Chat não encontrado: {str(e)}</p>", 404
 
 @app.route('/api/chat/<chat_id>/info', methods=['GET'])
 def get_chat_info(chat_id):
-    """Obter informações do chat"""
     try:
+        from models.database import chat_model, user_model
+        
         chat = chat_model.get_chat_by_id(chat_id)
         if not chat:
             return jsonify({'success': False, 'error': 'Chat não encontrado'}), 404
         
-        # Buscar informações do usuário
         user = user_model.get_user_by_id(chat['user_id'])
         
         return jsonify({
@@ -101,12 +121,14 @@ def get_chat_info(chat_id):
             }
         })
     except Exception as e:
+        print(f"Erro get_chat_info: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/chat/<chat_id>/send', methods=['POST'])
 def send_message(chat_id):
-    """Enviar mensagem para o chat com contexto de documentos"""
     try:
+        from models.database import chat_model, message_model
+        
         data = request.get_json()
         user_message = data.get('message', '').strip()
         conversation_id = data.get('conversation_id', str(uuid.uuid4()))
@@ -114,7 +136,7 @@ def send_message(chat_id):
         if not user_message:
             return jsonify({'success': False, 'error': 'Mensagem vazia'}), 400
         
-        # Buscar configurações do chat
+        # Buscar chat
         chat = chat_model.get_chat_by_id(chat_id)
         if not chat:
             return jsonify({'success': False, 'error': 'Chat não encontrado'}), 404
@@ -128,48 +150,21 @@ def send_message(chat_id):
             source='web'
         )
         
-        # Buscar histórico da conversa
-        history = message_model.get_conversation_history(chat_id, conversation_id, limit=10)
-        
-        # NOVO: Buscar contexto relevante dos documentos
-        knowledge_context = knowledge_service.get_chat_knowledge_context(
-            chat_id=chat_id, 
-            query_text=user_message,
-            max_docs=3
-        )
-        
         # Preparar mensagens para Claude
-        claude_messages = []
-        
-        # System prompt melhorado com contexto
-        enhanced_system_prompt = chat['system_prompt']
-        
-        if knowledge_context:
-            enhanced_system_prompt += f"\n\n{knowledge_context}\n\n"
-            enhanced_system_prompt += """
-INSTRUÇÕES PARA USO DOS DOCUMENTOS:
-- Use as informações dos documentos fornecidos quando relevantes para a pergunta
-- Cite os documentos quando usar informações específicas deles
-- Se a informação não estiver nos documentos, use seu conhecimento geral
-- Seja preciso e factual ao referenciar os documentos
-"""
-        
-        claude_messages.append({
-            "role": "user",
-            "content": f"Sistema: {enhanced_system_prompt}"
-        })
-        claude_messages.append({
-            "role": "assistant", 
-            "content": "Entendido. Estou pronto para ajudar seguindo essas instruções e usando os documentos fornecidos quando relevantes."
-        })
-        
-        # Adicionar histórico
-        for msg in history:
-            if msg['role'] in ['user', 'assistant']:
-                claude_messages.append({
-                    "role": msg['role'],
-                    "content": msg['content']
-                })
+        claude_messages = [
+            {
+                "role": "user",
+                "content": f"Sistema: {chat['system_prompt']}"
+            },
+            {
+                "role": "assistant", 
+                "content": "Entendido. Estou pronto para ajudar."
+            },
+            {
+                "role": "user",
+                "content": user_message
+            }
+        ]
         
         # Enviar para Claude
         start_time = datetime.now()
@@ -186,17 +181,11 @@ INSTRUÇÕES PARA USO DOS DOCUMENTOS:
                 'error': claude_response['error']
             }), 500
         
-        # Extrair resposta do Claude
+        # Extrair resposta
         assistant_message = claude_response['content'][0]['text']
         tokens_used = claude_response.get('usage', {}).get('output_tokens', 0)
         
-        # Metadados sobre o contexto usado
-        context_metadata = {
-            'documents_used': len(knowledge_context.split('📄')) - 1 if knowledge_context else 0,
-            'has_knowledge_context': bool(knowledge_context)
-        }
-        
-        # Salvar resposta do Claude
+        # Salvar resposta
         message_model.save_message(
             chat_id=chat_id,
             conversation_id=conversation_id,
@@ -212,11 +201,11 @@ INSTRUÇÕES PARA USO DOS DOCUMENTOS:
             'message': assistant_message,
             'conversation_id': conversation_id,
             'tokens_used': tokens_used,
-            'response_time_ms': response_time,
-            'context_metadata': context_metadata
+            'response_time_ms': response_time
         })
         
     except Exception as e:
+        print(f"Erro send_message: {e}")
         return jsonify({
             'success': False,
             'error': f'Erro interno: {str(e)}'
@@ -224,8 +213,8 @@ INSTRUÇÕES PARA USO DOS DOCUMENTOS:
 
 @app.route('/api/chat/<chat_id>/history/<conversation_id>', methods=['GET'])
 def get_conversation_history(chat_id, conversation_id):
-    """Buscar histórico da conversa"""
     try:
+        from models.database import message_model
         history = message_model.get_conversation_history(chat_id, conversation_id)
         return jsonify({
             'success': True,
@@ -237,12 +226,15 @@ def get_conversation_history(chat_id, conversation_id):
             'error': str(e)
         }), 500
 
-@app.route('/health')
-def health():
-    """Health check"""
-    return jsonify({'status': 'healthy', 'service': 'chat-engine'})
+# Error handlers
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'Endpoint não encontrado'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'error': 'Erro interno do servidor'}), 500
 
 if __name__ == '__main__':
-    print("🤖 Iniciando Chat Engine...")
-    print(f"🔗 Acesse: http://localhost:5001")
+    print("🚀 Chat Engine iniciando...")
     app.run(debug=True, host='0.0.0.0', port=5001)

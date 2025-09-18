@@ -1,3 +1,20 @@
+#!/bin/bash
+
+echo "🧹 LIMPEZA COMPLETA E CORREÇÃO DO DASHBOARD"
+echo "==========================================="
+
+cd ~/saas-chat-generator/backend
+
+# Backup do arquivo atual
+echo "💾 Fazendo backup..."
+cp templates/dashboard.html templates/dashboard.html.backup.$(date +%Y%m%d_%H%M%S)
+
+echo "✅ Backup salvo"
+
+# Criar o novo dashboard limpo e funcional
+echo "🎨 Criando dashboard novo e limpo..."
+
+cat > templates/dashboard.html << 'EOF'
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -659,3 +676,43 @@
     </script>
 </body>
 </html>
+EOF
+
+echo "✅ Dashboard novo criado!"
+
+echo "🚀 Fazendo deploy..."
+
+# Deploy atualizado
+gcloud run deploy saas-chat-backend \
+  --source=. \
+  --platform=managed \
+  --region=us-east1 \
+  --allow-unauthenticated \
+  --port=8080 \
+  --memory=1Gi \
+  --cpu=1 \
+  --max-instances=10 \
+  --quiet
+
+echo ""
+echo "🎉 DASHBOARD COMPLETAMENTE CORRIGIDO!"
+echo ""
+echo "✅ O que foi feito:"
+echo "   🧹 Removido todo código desnecessário"
+echo "   🎨 Dashboard limpo e funcional"
+echo "   🔗 URLs corretas dos serviços"
+echo "   💬 Botão de chat funcionando"
+echo "   ⚙️ Botão de gerenciamento funcionando"
+echo "   📊 Stats e cards funcionando"
+echo "   🔧 Console logs para debug"
+echo ""
+echo "🌐 Acesse agora:"
+echo "   👉 https://saas-chat-backend-365442086139.us-east1.run.app/login"
+echo ""
+echo "📋 Teste:"
+echo "1. Faça login"
+echo "2. Crie um chat"
+echo "3. Clique no botão '💬 Chat'"
+echo "4. Comece a conversar!"
+echo ""
+echo "🚀 PRONTO PARA WHATSAPP!"

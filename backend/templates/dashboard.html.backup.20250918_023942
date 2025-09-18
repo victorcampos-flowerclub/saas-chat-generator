@@ -189,12 +189,11 @@
         
         .chat-actions {
             display: flex;
-            gap: 8px;
-            flex-wrap: wrap;
+            gap: 10px;
         }
         
         .btn-small {
-            padding: 6px 12px;
+            padding: 8px 12px;
             font-size: 12px;
             border-radius: 4px;
         }
@@ -428,17 +427,13 @@
     </div>
     
     <script>
-        // URLs dos serviços - CORRETAS E ATUALIZADAS
-        const BACKEND_URL = 'https://saas-chat-backend-365442086139.us-east1.run.app';
-        const ENGINE_URL = 'https://saas-chat-engine-zyzjkxq7ca-ue.a.run.app';
-        
+        const API_BASE = 'https://saas-chat-backend-zyzjkxq7ca-ue.a.run.app';
         let authToken = '';
         let currentUser = {};
         let userChats = [];
         
         // Inicializar dashboard
         document.addEventListener('DOMContentLoaded', function() {
-            console.log('🚀 Dashboard iniciado - versão limpa');
             checkAuth();
             loadUserData();
             loadChats();
@@ -449,19 +444,18 @@
             const userStr = localStorage.getItem('user');
             
             if (!authToken || !userStr) {
-                console.log('❌ Sem autenticação');
                 window.location.href = '/login';
                 return;
             }
             
             currentUser = JSON.parse(userStr);
-            console.log('✅ Usuário:', currentUser.full_name);
         }
         
         function loadUserData() {
             document.getElementById('userName').textContent = currentUser.full_name;
             document.getElementById('userPlan').textContent = currentUser.plan.toUpperCase();
             
+            // Atualizar limite do plano
             const planLimits = {
                 'free': 1,
                 'basic': 3,
@@ -473,17 +467,14 @@
         }
         
         async function loadChats() {
-            console.log('📊 Carregando chats...');
-            
             try {
-                const response = await fetch(`${BACKEND_URL}/api/chats`, {
+                const response = await fetch(`${API_BASE}/api/chats`, {
                     headers: {
                         'Authorization': `Bearer ${authToken}`
                     }
                 });
                 
                 const data = await response.json();
-                console.log('📨 Chats recebidos:', data);
                 
                 if (data.success) {
                     userChats = data.chats;
@@ -493,13 +484,14 @@
                     showAlert('Erro ao carregar chats: ' + data.error, 'error');
                 }
             } catch (error) {
-                console.error('❌ Erro:', error);
-                showAlert('Erro de conexão', 'error');
+                showAlert('Erro de conexão ao carregar chats', 'error');
             }
         }
         
         function updateStats() {
             document.getElementById('totalChats').textContent = userChats.length;
+            
+            // Calcular total de mensagens (simulado)
             const totalMessages = userChats.reduce((sum, chat) => sum + (chat.total_messages || 0), 0);
             document.getElementById('totalMessages').textContent = totalMessages;
         }
@@ -507,8 +499,6 @@
         function renderChats() {
             const chatsGrid = document.getElementById('chatsGrid');
             const emptyState = document.getElementById('emptyState');
-            
-            console.log('🎨 Renderizando', userChats.length, 'chats');
             
             if (userChats.length === 0) {
                 chatsGrid.style.display = 'none';
@@ -535,58 +525,14 @@
                     </div>
                     
                     <div class="chat-actions">
-                        <button class="btn btn-small btn-success" onclick="openChat('${chat.chat_id}')" title="Abrir chat">
-                            💬 Chat
-                        </button>
-                        <button class="btn btn-small" onclick="manageChat('${chat.chat_id}')" title="Gerenciar documentos">
-                            ⚙️ Gerenciar
-                        </button>
-                        <button class="btn btn-small btn-secondary" onclick="editChat('${chat.chat_id}')" title="Editar">
-                            ✏️ Editar
-                        </button>
-                        <button class="btn btn-small btn-danger" onclick="deleteChat('${chat.chat_id}')" title="Excluir">
-                            🗑️ Excluir
-                        </button>
+                        <button class="btn btn-small btn-success" onclick="testChat('${chat.chat_id}')">Testar Chat</button>
+                        <button class="btn btn-small" onclick="manageChat('${chat.chat_id}')">Gerenciar</button>
+                        <button class="btn btn-small btn-secondary" onclick="editChat('${chat.chat_id}')">Editar</button>
+                        <button class="btn btn-small btn-danger" onclick="deleteChat('${chat.chat_id}')">Excluir</button>
                     </div>
                 </div>
             `).join('');
         }
-        
-        // FUNÇÕES PRINCIPAIS - LIMPAS E FUNCIONAIS
-        
-        function openChat(chatId) {
-            console.log('💬 Abrindo chat:', chatId);
-            const chatUrl = `${ENGINE_URL}/chat/${chatId}`;
-            showAlert('🔄 Abrindo chat...', 'success');
-            
-            const newWindow = window.open(chatUrl, '_blank');
-            
-            if (newWindow) {
-                setTimeout(() => {
-                    showAlert('✅ Chat aberto!', 'success');
-                }, 1000);
-            } else {
-                showAlert('❌ Permita popups', 'error');
-            }
-        }
-        
-        function manageChat(chatId) {
-            console.log('⚙️ Gerenciando:', chatId);
-            const manageUrl = `${BACKEND_URL}/manage/${chatId}`;
-            window.open(manageUrl, '_blank');
-        }
-        
-        function editChat(chatId) {
-            showAlert('🔧 Em breve', 'success');
-        }
-        
-        function deleteChat(chatId) {
-            if (confirm('Excluir este chat?')) {
-                showAlert('🔧 Em breve', 'success');
-            }
-        }
-        
-        // MODAL
         
         function openCreateModal() {
             document.getElementById('createModal').style.display = 'block';
@@ -597,8 +543,18 @@
             document.getElementById('createChatForm').reset();
         }
         
-        // CRIAR CHAT
+        function showAlert(message, type = 'error') {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = `alert alert-${type}`;
+            alert.style.display = 'block';
+            
+            setTimeout(() => {
+                alert.style.display = 'none';
+            }, 5000);
+        }
         
+        // Event listener para form de criar chat
         document.getElementById('createChatForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             
@@ -612,10 +568,8 @@
                 max_tokens: parseInt(document.getElementById('maxTokens').value)
             };
             
-            console.log('📝 Criando:', formData);
-            
             try {
-                const response = await fetch(`${BACKEND_URL}/api/chats`, {
+                const response = await fetch(`${API_BASE}/api/chats`, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -627,28 +581,32 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    showAlert('✅ Chat criado!', 'success');
+                    showAlert('Chat criado com sucesso!', 'success');
                     closeCreateModal();
-                    loadChats();
+                    loadChats(); // Recarregar lista
                 } else {
-                    showAlert('❌ Erro: ' + data.error, 'error');
+                    showAlert('Erro ao criar chat: ' + data.error, 'error');
                 }
             } catch (error) {
-                showAlert('❌ Erro de conexão', 'error');
+                showAlert('Erro de conexão ao criar chat', 'error');
             }
         });
         
-        // UTILS
+        function testChat(chatId) {
+            // TODO: Implementar teste do chat
+            alert(`Teste do chat ${chatId} será implementado`);
+        }
         
-        function showAlert(message, type = 'error') {
-            const alert = document.getElementById('alert');
-            alert.textContent = message;
-            alert.className = `alert alert-${type}`;
-            alert.style.display = 'block';
-            
-            setTimeout(() => {
-                alert.style.display = 'none';
-            }, 5000);
+        function editChat(chatId) {
+            // TODO: Implementar edição do chat
+            alert(`Edição do chat ${chatId} será implementada`);
+        }
+        
+        function deleteChat(chatId) {
+            if (confirm('Tem certeza que deseja excluir este chat?')) {
+                // TODO: Implementar exclusão
+                alert(`Exclusão do chat ${chatId} será implementada`);
+            }
         }
         
         function logout() {
@@ -659,3 +617,81 @@
     </script>
 </body>
 </html>
+
+<script>
+function manageChat(chatId) {
+
+function testChat(chatId) {
+    alert(`Chat ID: ${chatId}\n\nPara testar: https://saas-chat-engine-zyzjkxq7ca-ue.a.run.app/chat/${chatId}`);
+}
+    window.open(`/manage/${chatId}`, '_blank');
+}
+</script>
+
+<script>
+function manageChat(chatId) {
+
+function testChat(chatId) {
+    alert(`Chat ID: ${chatId}\n\nPara testar: https://saas-chat-engine-zyzjkxq7ca-ue.a.run.app/chat/${chatId}`);
+}
+    window.open(`/manage/${chatId}`, '_blank');
+}
+</script>
+
+<script>
+function manageChat(chatId) {
+
+function testChat(chatId) {
+    alert(`Chat ID: ${chatId}\n\nPara testar: https://saas-chat-engine-zyzjkxq7ca-ue.a.run.app/chat/${chatId}`);
+}
+    window.open(`/manage/${chatId}`, '_blank');
+}
+</script>
+
+<!-- Seção de Teste de Knowledge Base -->
+<div class="card" style="margin-top: 30px;">
+    <h3>🧠 Teste Knowledge Base</h3>
+    <p>Teste se os documentos estão sendo encontrados pelo sistema</p>
+    
+    <div style="margin: 20px 0;">
+        <input type="text" id="testChatId" placeholder="ID do Chat" style="width: 300px; padding: 8px; margin-right: 10px;">
+        <input type="text" id="testMessage" placeholder="Sua pergunta sobre o documento" style="width: 300px; padding: 8px; margin-right: 10px;">
+        <button class="btn" onclick="testKnowledgeBase()">Testar</button>
+    </div>
+    
+    <div id="testResult" style="background: #f8f9fa; padding: 15px; border-radius: 8px; display: none;">
+        <h4>Resultado:</h4>
+        <pre id="testResultContent"></pre>
+    </div>
+</div>
+
+<script>
+async function testKnowledgeBase() {
+    const chatId = document.getElementById('testChatId').value;
+    const message = document.getElementById('testMessage').value;
+    
+    if (!chatId || !message) {
+        alert('Preencha o ID do chat e a mensagem');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/test/chat/${chatId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ message: message })
+        });
+        
+        const result = await response.json();
+        
+        document.getElementById('testResult').style.display = 'block';
+        document.getElementById('testResultContent').textContent = JSON.stringify(result, null, 2);
+        
+    } catch (error) {
+        alert('Erro no teste: ' + error.message);
+    }
+}
+</script>
