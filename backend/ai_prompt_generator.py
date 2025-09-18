@@ -1,38 +1,48 @@
 """
-Sistema de Geração de Prompts com IA - VERSÃO SIMPLIFICADA
-Baseado na abordagem funcional do chat-engine
+Sistema de Geração de Prompts com IA - VERSÃO SEM DEADLOCK
+Carrega a API key ANTES do gunicorn worker inicializar
 """
 
 import json
 import re
+import os
 from typing import Dict, List, Optional, Any
 import requests
 from google.cloud import bigquery
 import logging
 
-# Cache global da API key
-API_KEY_CACHE = None
+# CARREGAR API KEY GLOBALMENTE NA INICIALIZAÇÃO (antes do gunicorn)
+CLAUDE_API_KEY = None
 
-def get_claude_api_key():
-    """Função SIMPLES para pegar API key - baseada no chat-engine"""
-    global API_KEY_CACHE
+def initialize_api_key():
+    """Inicializar API key ANTES do gunicorn worker"""
+    global CLAUDE_API_KEY
     
-    if API_KEY_CACHE:
-        return API_KEY_CACHE
+    if CLAUDE_API_KEY:
+        return CLAUDE_API_KEY
     
     try:
+        # Tentar Secret Manager UMA VEZ na inicialização
         from google.cloud import secretmanager
         client = secretmanager.SecretManagerServiceClient()
         name = "projects/flower-ai-generator/secrets/claude-api-key/versions/latest"
         response = client.access_secret_version(request={"name": name})
         api_key = response.payload.data.decode("UTF-8").strip()
         
-        if api_key and len(api_key) > 50:
-            API_KEY_CACHE = api_key
+        if api_key and api_key.startswith('sk-ant-api03-'):
+            CLAUDE_API_KEY = api_key
+            print(f"✅ Claude API key carregada: {api_key[:20]}...")
             return api_key
-        return None
+        else:
+            raise ValueError("API key inválida")
+            
     except Exception as e:
-        print(f"Erro API key: {e}")
+        print(f"❌ Erro ao carregar Claude API key: {e}")
+        # Fallback: tentar variável de ambiente
+        env_key = os.getenv('CLAUDE_API_KEY')
+        if env_key:
+            CLAUDE_API_KEY = env_key
+            return env_key
         return None
 
 class AIPromptGenerator:
@@ -40,16 +50,19 @@ class AIPromptGenerator:
         self.project_id = project_id
         self.bigquery_client = bigquery.Client(project=project_id)
         
+        # Garantir que API key está carregada
+        if not CLAUDE_API_KEY:
+            initialize_api_key()
+        
     def analyze_documents(self, chat_id: str) -> Dict[str, Any]:
-        """Analisa documentos do chat para extrair informações relevantes"""
+        """Analisa documentos do chat - SEM chamadas ao Secret Manager"""
         try:
-            # Query simples como no chat-engine
             query = """
             SELECT filename, processed_content, file_type
             FROM `flower-ai-generator.saas_chat_generator.chat_documents`
             WHERE chat_id = @chat_id
             ORDER BY uploaded_at DESC
-            LIMIT 5
+            LIMIT 3
             """
             
             job_config = bigquery.QueryJobConfig(
@@ -61,19 +74,15 @@ class AIPromptGenerator:
             if not results:
                 return self._default_analysis()
             
-            # Combinar conteúdo
+            # Combinar conteúdo (limitado)
             all_content = ""
-            document_types = []
-            
-            for doc in results:
+            for doc in results[:2]:  # Máximo 2 documentos
                 if doc['processed_content']:
-                    # Apenas primeiros 1000 chars
-                    content_chunk = doc['processed_content'][:1000]
+                    content_chunk = doc['processed_content'][:800]  # 800 chars max
                     all_content += f"\n{content_chunk}"
-                document_types.append(doc.get('file_type', 'unknown'))
             
-            if all_content:
-                return self._analyze_content_with_ai(all_content, document_types)
+            if all_content and CLAUDE_API_KEY:
+                return self._analyze_content_with_ai(all_content)
             else:
                 return self._default_analysis()
                 
@@ -81,123 +90,90 @@ class AIPromptGenerator:
             logging.error(f"Erro ao analisar documentos: {e}")
             return self._default_analysis()
 
-    def _analyze_content_with_ai(self, content: str, document_types: List[str]) -> Dict[str, Any]:
-        """Usa Claude para analisar - VERSÃO SIMPLES"""
+    def _analyze_content_with_ai(self, content: str) -> Dict[str, Any]:
+        """Análise com Claude - SEM acesso ao Secret Manager"""
         
-        api_key = get_claude_api_key()
-        if not api_key:
+        if not CLAUDE_API_KEY:
             return self._default_analysis()
         
         try:
-            # Prompt muito simples
+            # Prompt SUPER conciso para evitar timeout
             analysis_prompt = f"""
-            Analise este conteúdo e extraia informações para criar um chatbot:
-
-            CONTEÚDO: {content[:2000]}
-
-            Retorne um JSON com:
-            - company_info: nome da empresa/pessoa
-            - services: lista de serviços
-            - tone: tom recomendado (friendly/professional)
-            - key_concepts: conceitos importantes
-
-            Apenas JSON, sem explicações.
+            Analise este conteúdo em JSON:
+            {content[:1500]}
+            
+            JSON:
+            {{"company_info": {{"name": "Nome da empresa"}}, "services": ["serviço1"], "tone": "friendly"}}
             """
 
             headers = {
                 "Content-Type": "application/json",
-                "x-api-key": api_key,
+                "x-api-key": CLAUDE_API_KEY,
                 "anthropic-version": "2023-06-01"
             }
             
             data = {
                 "model": "claude-3-haiku-20240307",
-                "max_tokens": 300,
+                "max_tokens": 200,  # MUITO pequeno
                 "messages": [{"role": "user", "content": analysis_prompt}]
             }
             
+            # Timeout agressivo
             response = requests.post(
                 "https://api.anthropic.com/v1/messages",
                 headers=headers,
                 json=data,
-                timeout=20
+                timeout=10
             )
             
             if response.status_code == 200:
                 result = response.json()
                 content_response = result['content'][0]['text']
                 
-                # Extrair JSON
-                json_match = re.search(r'\{.*\}', content_response, re.DOTALL)
-                
+                # Extrair JSON básico
+                json_match = re.search(r'\{[^}]*\}', content_response)
                 if json_match:
                     try:
-                        analysis = json.loads(json_match.group())
-                        analysis['document_types'] = document_types
-                        return analysis
-                    except json.JSONDecodeError:
-                        return self._default_analysis()
-                else:
-                    return self._default_analysis()
-                    
-            else:
-                return self._default_analysis()
+                        return json.loads(json_match.group())
+                    except:
+                        pass
+                        
+            return self._default_analysis()
                 
         except Exception as e:
-            logging.error(f"Erro na análise com IA: {e}")
+            logging.error(f"Erro na análise: {e}")
             return self._default_analysis()
 
-    def _default_analysis(self) -> Dict[str, Any]:
-        """Análise padrão"""
-        return {
-            'company_info': {'name': 'não identificado', 'industry': 'não identificado'},
-            'services': [],
-            'tone': 'professional',
-            'key_concepts': [],
-            'target_audience': 'não identificado',
-            'document_types': []
-        }
-
     def generate_optimized_prompt(self, chat_config: Dict, documents_analysis: Dict) -> str:
-        """Gera prompt otimizado - VERSÃO SIMPLES"""
+        """Gera prompt - SEM Secret Manager"""
         
-        api_key = get_claude_api_key()
-        if not api_key:
+        if not CLAUDE_API_KEY:
             return self._fallback_prompt(chat_config, documents_analysis)
         
         try:
             company = documents_analysis.get('company_info', {}).get('name', 'não identificado')
             services = documents_analysis.get('services', [])
-            tone = documents_analysis.get('tone', 'professional')
             
+            # Prompt MUITO simples
             generation_prompt = f"""
-            Crie um prompt de sistema para um chatbot com estas informações:
-
+            Crie um prompt de sistema para:
             - Nome: {chat_config['chat_name']}
-            - Tipo: {chat_config['chat_type']}
+            - Tipo: {chat_config['chat_type']} 
             - Personalidade: {chat_config['personality']}
             - Empresa: {company}
-            - Serviços: {', '.join(services[:3]) if services else 'vários'}
-            - Tom: {tone}
-
-            O prompt deve:
-            1. NÃO mencionar arquivos ou documentos
-            2. Ser natural e conversacional
-            3. Usar tom {chat_config['personality']}
-            4. Se for "support", ajudar com agendamento e informações
-
-            Retorne APENAS o prompt, sem explicações.
+            
+            Prompt deve ser natural, não mencionar arquivos, e ser {chat_config['personality']}.
             """
 
             headers = {
                 "Content-Type": "application/json",
-                "x-api-key": api_key,
+                "x-api-key": CLAUDE_API_KEY,
                 "anthropic-version": "2023-06-01"
             }
             
             data = {
                 "model": "claude-3-haiku-20240307",
-                "max_tokens": 400,
+                "max_tokens": 300,
                 "messages": [{"role": "user", "content": generation_prompt}]
             }
             
@@ -205,35 +181,38 @@ class AIPromptGenerator:
                 "https://api.anthropic.com/v1/messages",
                 headers=headers,
                 json=data,
-                timeout=20
+                timeout=10
             )
             
             if response.status_code == 200:
                 result = response.json()
                 prompt = result['content'][0]['text'].strip()
-                
-                # Limpar se tiver aspas extras
-                if prompt.startswith('"') and prompt.endswith('"'):
-                    prompt = prompt[1:-1]
-                
                 return prompt if len(prompt) > 20 else self._fallback_prompt(chat_config, documents_analysis)
             else:
                 return self._fallback_prompt(chat_config, documents_analysis)
                 
         except Exception as e:
-            logging.error(f"Erro na geração de prompt: {e}")
+            logging.error(f"Erro na geração: {e}")
             return self._fallback_prompt(chat_config, documents_analysis)
 
+    def _default_analysis(self) -> Dict[str, Any]:
+        return {
+            'company_info': {'name': 'não identificado'},
+            'services': [],
+            'tone': 'professional'
+        }
+
     def _fallback_prompt(self, chat_config: Dict, documents_analysis: Dict) -> str:
-        """Prompt de fallback"""
         company = documents_analysis.get('company_info', {}).get('name', '')
         personality = chat_config.get('personality', 'professional')
-        chat_type = chat_config.get('chat_type', 'assistant')
         
         if company and company != 'não identificado':
-            return f"Você é um assistente {personality} da {company}. Ajude os usuários com informações e, quando apropriado, direcione para agendamentos ou próximos passos. Seja {personality} e útil."
+            return f"Você é um assistente {personality} da {company}. Responda de forma {personality} e útil, direcionando para agendamentos quando apropriado."
         else:
-            return f"Você é um assistente {personality} especializado em {chat_type}. Responda de forma {personality} e sempre busque ser útil aos usuários."
+            return f"Você é um assistente {personality}. Seja {personality} e sempre tente ajudar os usuários."
+
+# Inicializar API key IMEDIATAMENTE
+initialize_api_key()
 
 # Instância global
 ai_prompt_generator = AIPromptGenerator()
