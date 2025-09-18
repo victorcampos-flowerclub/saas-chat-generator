@@ -7,7 +7,7 @@ from datetime import timedelta
 import re
 from typing import Dict, Optional, Tuple
 
-from backend.models.database import user_model
+from models.database import user_model
 
 class AuthService:
     @staticmethod

@@ -13,9 +13,9 @@ import json
 # Adicionar o diretório pai ao path para imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.config import Config
-from backend.auth.auth_service import auth_service
-from backend.models.database import user_model, chat_model, message_model
+from config import Config
+from auth.auth_service import auth_service
+from models.database import user_model, chat_model, message_model
 
 # Inicializar Flask
 app = Flask(__name__)
