@@ -10,4 +10,12 @@ COPY . .
 ENV PORT=8080
 EXPOSE 8080
 
-CMD exec gunicorn --bind :$PORT --workers 1 --worker-class gevent --timeout 60 app:app
+# Configuração otimizada do gunicorn
+CMD exec gunicorn --bind :$PORT \
+    --workers 1 \
+    --worker-class gevent \
+    --timeout 120 \
+    --preload \
+    --max-requests 1000 \
+    --max-requests-jitter 100 \
+    app:app
