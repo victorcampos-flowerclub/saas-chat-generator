@@ -14,8 +14,8 @@ import requests
 # Adicionar path do projeto
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from backend.config import Config
-from backend.models.database import chat_model, message_model, user_model
+from config import Config
+from models.database import chat_model, message_model, user_model
 from google.cloud import secretmanager
 from knowledge_base_system import knowledge_service
 

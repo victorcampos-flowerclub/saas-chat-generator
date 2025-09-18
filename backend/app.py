@@ -475,3 +475,35 @@ if __name__ == '__main__':
     print(f"🤖 Modelo Claude: {Config.CLAUDE_MODEL}")
     
     app.run(debug=True, host='0.0.0.0', port=5000)
+@app.route('/api/test/chat/<chat_id>', methods=['POST'])
+@jwt_required()
+def test_chat_with_documents(chat_id):
+    """Teste simples de chat com documentos"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        user_message = data.get('message', '').strip()
+        
+        if not user_message:
+            return jsonify({'success': False, 'error': 'Mensagem vazia'}), 400
+        
+        # Buscar contexto dos documentos
+        if KNOWLEDGE_BASE_ENABLED:
+            context = knowledge_service.get_chat_knowledge_context(
+                chat_id=chat_id, 
+                query_text=user_message,
+                max_docs=3
+            )
+            
+            return jsonify({
+                'success': True,
+                'message': user_message,
+                'context_found': bool(context),
+                'context_preview': context[:500] + '...' if len(context) > 500 else context,
+                'documents_count': len(context.split('📄')) - 1 if context else 0
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Knowledge Base não habilitado'})
+            
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500

@@ -525,6 +525,7 @@
                     </div>
                     
                     <div class="chat-actions">
+                        <button class="btn btn-small btn-success" onclick="testChat('${chat.chat_id}')">Testar Chat</button>
                         <button class="btn btn-small" onclick="manageChat('${chat.chat_id}')">Gerenciar</button>
                         <button class="btn btn-small btn-secondary" onclick="editChat('${chat.chat_id}')">Editar</button>
                         <button class="btn btn-small btn-danger" onclick="deleteChat('${chat.chat_id}')">Excluir</button>
@@ -619,18 +620,78 @@
 
 <script>
 function manageChat(chatId) {
+
+function testChat(chatId) {
+    alert(`Chat ID: ${chatId}\n\nPara testar: https://saas-chat-engine-zyzjkxq7ca-ue.a.run.app/chat/${chatId}`);
+}
     window.open(`/manage/${chatId}`, '_blank');
 }
 </script>
 
 <script>
 function manageChat(chatId) {
+
+function testChat(chatId) {
+    alert(`Chat ID: ${chatId}\n\nPara testar: https://saas-chat-engine-zyzjkxq7ca-ue.a.run.app/chat/${chatId}`);
+}
     window.open(`/manage/${chatId}`, '_blank');
 }
 </script>
 
 <script>
 function manageChat(chatId) {
+
+function testChat(chatId) {
+    alert(`Chat ID: ${chatId}\n\nPara testar: https://saas-chat-engine-zyzjkxq7ca-ue.a.run.app/chat/${chatId}`);
+}
     window.open(`/manage/${chatId}`, '_blank');
+}
+</script>
+
+<!-- Seção de Teste de Knowledge Base -->
+<div class="card" style="margin-top: 30px;">
+    <h3>🧠 Teste Knowledge Base</h3>
+    <p>Teste se os documentos estão sendo encontrados pelo sistema</p>
+    
+    <div style="margin: 20px 0;">
+        <input type="text" id="testChatId" placeholder="ID do Chat" style="width: 300px; padding: 8px; margin-right: 10px;">
+        <input type="text" id="testMessage" placeholder="Sua pergunta sobre o documento" style="width: 300px; padding: 8px; margin-right: 10px;">
+        <button class="btn" onclick="testKnowledgeBase()">Testar</button>
+    </div>
+    
+    <div id="testResult" style="background: #f8f9fa; padding: 15px; border-radius: 8px; display: none;">
+        <h4>Resultado:</h4>
+        <pre id="testResultContent"></pre>
+    </div>
+</div>
+
+<script>
+async function testKnowledgeBase() {
+    const chatId = document.getElementById('testChatId').value;
+    const message = document.getElementById('testMessage').value;
+    
+    if (!chatId || !message) {
+        alert('Preencha o ID do chat e a mensagem');
+        return;
+    }
+    
+    try {
+        const response = await fetch(`${API_BASE}/api/test/chat/${chatId}`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify({ message: message })
+        });
+        
+        const result = await response.json();
+        
+        document.getElementById('testResult').style.display = 'block';
+        document.getElementById('testResultContent').textContent = JSON.stringify(result, null, 2);
+        
+    } catch (error) {
+        alert('Erro no teste: ' + error.message);
+    }
 }
 </script>

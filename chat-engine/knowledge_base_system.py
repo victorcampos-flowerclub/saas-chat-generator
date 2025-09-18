@@ -33,7 +33,7 @@ class KnowledgeBaseService:
             bucket = self.storage_client.create_bucket(bucket, location="US")
             print(f"Bucket {self.bucket_name} criado")
     
-    def upload_document(self, chat_id, file_data, filename, content_type):
+    def upload_document(self, chat_id, file_data, filename, content_type, user_id=None):
         """Upload de documento para o storage"""
         try:
             # Gerar ID único para o documento
@@ -53,6 +53,7 @@ class KnowledgeBaseService:
             # Salvar metadados no BigQuery
             document_data = {
                 'document_id': doc_id,
+            'user_id': user_id,
                 'chat_id': chat_id,
                 'filename': filename,
                 'original_filename': filename,
@@ -73,6 +74,7 @@ class KnowledgeBaseService:
                 return {
                     'success': True,
                     'document_id': doc_id,
+            'user_id': user_id,
                     'storage_path': storage_path,
                     'processed_content': processed_content[:500] + '...' if len(processed_content) > 500 else processed_content
                 }
