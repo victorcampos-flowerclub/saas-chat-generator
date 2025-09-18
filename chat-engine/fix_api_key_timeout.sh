@@ -1,3 +1,16 @@
+#!/bin/bash
+
+echo "🔧 CORRIGINDO CHAT ENGINE - Timeout API Key Resolvido"
+echo "====================================================="
+
+cd ~/saas-chat-generator/chat-engine
+
+# Backup do atual
+cp app.py app.py.backup.$(date +%Y%m%d_%H%M%S) 2>/dev/null || true
+
+echo "🛠️ Criando versão CORRIGIDA baseada na que funcionou..."
+
+cat > app.py << 'EOF'
 """
 Chat Engine com Knowledge Base - VERSÃO CORRIGIDA (Timeout Resolvido)
 Baseado na versão que funcionou + Knowledge Base integrado
@@ -680,3 +693,71 @@ if __name__ == '__main__':
         log_debug("⚠️ SISTEMA DEGRADADO")
     
     app.run(host='0.0.0.0', port=port, debug=False)
+EOF
+
+echo "✅ Chat Engine CORRIGIDO criado!"
+
+echo ""
+echo "🚀 Fazendo deploy CORRIGIDO..."
+
+gcloud run deploy saas-chat-engine \
+  --source=. \
+  --platform=managed \
+  --region=us-east1 \
+  --allow-unauthenticated \
+  --port=8080 \
+  --memory=1Gi \
+  --cpu=1 \
+  --timeout=120 \
+  --concurrency=80 \
+  --quiet
+
+sleep 10
+
+ENGINE_URL="https://saas-chat-engine-365442086139.us-east1.run.app"
+
+echo ""
+echo "🧪 TESTANDO VERSÃO CORRIGIDA..."
+echo "================================"
+
+echo ""
+echo "1. Health Check:"
+curl -s "$ENGINE_URL/health" | python3 -c "import sys, json; print(json.dumps(json.load(sys.stdin), indent=2))"
+
+echo ""
+echo "2. Teste com Chat Real:"
+CHAT_ID=$(bq query --use_legacy_sql=false --format=json \
+  'SELECT chat_id FROM `flower-ai-generator.saas_chat_generator.chats` LIMIT 1' \
+  2>/dev/null | jq -r '.[0].chat_id // "test-id"')
+
+echo "Chat ID: $CHAT_ID"
+
+echo ""
+echo "3. Debug do Chat:"
+curl -s "$ENGINE_URL/debug/$CHAT_ID" | python3 -c "import sys, json; print(json.dumps(json.load(sys.stdin), indent=2))"
+
+echo ""
+echo "4. Teste de Mensagem:"
+curl -s -X POST "$ENGINE_URL/api/chat/$CHAT_ID/send" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Olá! Este é um teste.", "conversation_id": "test"}' | \
+  python3 -c "import sys, json; print(json.dumps(json.load(sys.stdin), indent=2))"
+
+echo ""
+echo "🎉 CHAT ENGINE CORRIGIDO!"
+echo "========================="
+echo ""
+echo "🔗 URLs para teste:"
+echo "   Health: $ENGINE_URL/health"
+echo "   Debug: $ENGINE_URL/debug/$CHAT_ID"  
+echo "   Chat: $ENGINE_URL/chat/$CHAT_ID"
+echo ""
+echo "📱 Como testar:"
+echo "1. Acesse: $ENGINE_URL/chat/$CHAT_ID"
+echo "2. Digite uma mensagem"
+echo "3. Veja a resposta!"
+echo ""
+echo "💡 Para testar Knowledge Base:"
+echo "1. Vá ao dashboard e carregue documentos PDFs"
+echo "2. Pergunte sobre o conteúdo dos documentos"
+echo "3. O sistema vai buscar informações relevantes!"
