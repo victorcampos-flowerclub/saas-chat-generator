@@ -1,31 +1,31 @@
+# Secrets e API keys
+*api-key*
+*secret*
+*.env*
+.env
+.env.*
+
+# Backups
+*.backup*
+*backup*
+*.bak
+*.tmp
+*temp*
+
+# Logs
+*.log
+logs/
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
-*.pyd
-.Python
-env/
-venv/
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
-.tox/
-.coverage
-.coverage.*
-.cache
-nosetests.xml
-coverage.xml
-*.cover
-*.log
-.git/
-.mypy_cache/
-.pytest_cache/
-.hypothesis/
-.env
+
+# Sistema
 .DS_Store
-node_modules/
-*.sqlite3
-config/secrets.json
-*.key
-*.pem
-.vscode/
-.idea/
+Thumbs.db
+
+# Outros
+*.swp
+*.swo
+*~
