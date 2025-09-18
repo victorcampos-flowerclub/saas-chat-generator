@@ -7,3 +7,12 @@ anthropic==0.7.8
 asyncio
 uuid
 datetime
+PyPDF2==3.0.1
+python-magic==0.4.27
+google-cloud-storage==2.10.0
+PyPDF2==3.0.1
+python-magic==0.4.27
+google-cloud-storage==2.10.0
+PyPDF2==3.0.1
+python-magic==0.4.27
+google-cloud-storage==2.10.0

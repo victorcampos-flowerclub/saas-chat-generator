@@ -525,7 +525,7 @@
                     </div>
                     
                     <div class="chat-actions">
-                        <button class="btn btn-small" onclick="testChat('${chat.chat_id}')">Testar</button>
+                        <button class="btn btn-small" onclick="manageChat('${chat.chat_id}')">Gerenciar</button>
                         <button class="btn btn-small btn-secondary" onclick="editChat('${chat.chat_id}')">Editar</button>
                         <button class="btn btn-small btn-danger" onclick="deleteChat('${chat.chat_id}')">Excluir</button>
                     </div>
@@ -616,3 +616,21 @@
     </script>
 </body>
 </html>
+
+<script>
+function manageChat(chatId) {
+    window.open(`/manage/${chatId}`, '_blank');
+}
+</script>
+
+<script>
+function manageChat(chatId) {
+    window.open(`/manage/${chatId}`, '_blank');
+}
+</script>
+
+<script>
+function manageChat(chatId) {
+    window.open(`/manage/${chatId}`, '_blank');
+}
+</script>

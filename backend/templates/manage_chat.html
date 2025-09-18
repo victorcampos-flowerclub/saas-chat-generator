@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerenciar Chat</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f8fafc; }
+        .header { background: white; border-bottom: 1px solid #e5e7eb; padding: 20px 0; }
+        .header-content { max-width: 1200px; margin: 0 auto; padding: 0 20px; display: flex; justify-content: space-between; align-items: center; }
+        .logo { font-size: 24px; font-weight: bold; color: #4f46e5; }
+        .main-content { max-width: 1200px; margin: 0 auto; padding: 30px 20px; }
+        .card { background: white; border-radius: 12px; padding: 25px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .btn { background: #4f46e5; color: white; border: none; padding: 12px 24px; border-radius: 8px; cursor: pointer; }
+        .upload-area { border: 2px dashed #d1d5db; border-radius: 12px; padding: 40px; text-align: center; margin-bottom: 20px; cursor: pointer; }
+        .upload-area:hover { border-color: #4f46e5; }
+        .alert { padding: 12px; border-radius: 6px; margin-bottom: 20px; display: none; }
+        .alert-success { background: #dcfce7; color: #166534; }
+        .alert-error { background: #fee2e2; color: #dc2626; }
+        .github-input { display: flex; gap: 10px; margin: 20px 0; }
+        .github-input input { flex: 1; padding: 12px; border: 1px solid #d1d5db; border-radius: 8px; }
+        .document-item { border: 1px solid #e5e7eb; padding: 15px; margin: 10px 0; border-radius: 8px; }
+        .document-item strong { display: block; margin-bottom: 5px; }
+        .document-item small { color: #6b7280; display: block; margin-bottom: 10px; }
+        .btn-danger { background: #ef4444; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-content">
+            <div class="logo">🤖 Chat Generator</div>
+            <div><a href="/dashboard" style="color: #4f46e5; text-decoration: none;">← Voltar ao Dashboard</a></div>
+        </div>
+    </div>
+    
+    <div class="main-content">
+        <h1 style="margin-bottom: 30px;">Gerenciar Chat: {{ chat_id }}</h1>
+        
+        <div class="alert" id="alert"></div>
+        
+        <div class="card">
+            <h3 style="margin-bottom: 20px;">📄 Upload de Documentos</h3>
+            
+            <div class="upload-area" onclick="document.getElementById('fileInput').click()">
+                <div style="font-size: 48px; margin-bottom: 15px;">📄</div>
+                <h4>Clique para selecionar arquivos</h4>
+                <p style="color: #6b7280; margin-top: 10px;">
+                    Suporta: PDF, TXT, MD, JSON, CSV (máximo 10MB)
+                </p>
+                <input type="file" id="fileInput" style="display: none;" accept=".pdf,.txt,.md,.json,.csv" multiple>
+            </div>
+            
+            <h4>🐙 Importar do GitHub</h4>
+            <div class="github-input">
+                <input type="url" id="githubUrl" placeholder="https://github.com/usuario/repositorio">
+                <button class="btn" onclick="importGithub()">Importar</button>
+            </div>
+        </div>
+        
+        <div class="card">
+            <h3 style="margin-bottom: 20px;">📚 Documentos do Chat</h3>
+            <div id="documentsGrid">
+                <div style="text-align: center; padding: 20px; color: #6b7280;">
+                    Carregando documentos...
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const chatId = '{{ chat_id }}';
+        const API_BASE = window.location.origin;
+        let authToken = localStorage.getItem('access_token');
+        
+        if (!authToken) {
+            window.location.href = '/login';
+        }
+        
+        // Upload de arquivos
+        document.getElementById('fileInput').addEventListener('change', async function(e) {
+            for (const file of e.target.files) {
+                await uploadFile(file);
+            }
+            loadDocuments();
+        });
+        
+        async function uploadFile(file) {
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            showAlert(`Enviando ${file.name}...`, 'success');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/chats/${chatId}/documents`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${authToken}` },
+                    body: formData
+                });
+                
+                const data = await response.json();
+                showAlert(data.success ? `✅ ${file.name} enviado!` : `❌ Erro: ${data.error}`, data.success ? 'success' : 'error');
+            } catch (error) {
+                showAlert(`❌ Erro: ${error.message}`, 'error');
+            }
+        }
+        
+        async function importGithub() {
+            const githubUrl = document.getElementById('githubUrl').value.trim();
+            if (!githubUrl) {
+                showAlert('Informe uma URL do GitHub', 'error');
+                return;
+            }
+            
+            showAlert('Importando do GitHub...', 'success');
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/chats/${chatId}/documents/github`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
+                    body: JSON.stringify({ github_url: githubUrl })
+                });
+                
+                const data = await response.json();
+                showAlert(data.success ? '✅ GitHub importado!' : `❌ Erro: ${data.error}`, data.success ? 'success' : 'error');
+                if (data.success) {
+                    document.getElementById('githubUrl').value = '';
+                    loadDocuments();
+                }
+            } catch (error) {
+                showAlert(`❌ Erro: ${error.message}`, 'error');
+            }
+        }
+        
+        async function loadDocuments() {
+            try {
+                const response = await fetch(`${API_BASE}/api/chats/${chatId}/documents`, {
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                const data = await response.json();
+                
+                if (data.success) {
+                    const grid = document.getElementById('documentsGrid');
+                    
+                    if (data.documents.length === 0) {
+                        grid.innerHTML = '<p style="text-align: center; color: #6b7280; padding: 20px;">Nenhum documento adicionado ainda.</p>';
+                        return;
+                    }
+                    
+                    grid.innerHTML = data.documents.map(doc => `
+                        <div class="document-item">
+                            <strong>📄 ${doc.filename}</strong>
+                            <small>${doc.content_summary || 'Sem resumo disponível'}</small>
+                            <div>
+                                <span style="color: #6b7280; font-size: 12px;">
+                                    Tipo: ${doc.file_type} | Tamanho: ${(doc.file_size / 1024).toFixed(1)}KB
+                                </span>
+                            </div>
+                            <button class="btn btn-danger" style="margin-top: 10px;" onclick="deleteDocument('${doc.document_id}')">
+                                🗑️ Deletar
+                            </button>
+                        </div>
+                    `).join('');
+                }
+            } catch (error) {
+                console.error('Erro ao carregar documentos:', error);
+                showAlert('Erro ao carregar documentos', 'error');
+            }
+        }
+        
+        async function deleteDocument(docId) {
+            if (!confirm('Tem certeza que deseja deletar este documento?')) return;
+            
+            try {
+                const response = await fetch(`${API_BASE}/api/chats/${chatId}/documents/${docId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${authToken}` }
+                });
+                
+                const data = await response.json();
+                showAlert(data.success ? '✅ Documento deletado!' : `❌ Erro: ${data.error}`, data.success ? 'success' : 'error');
+                if (data.success) loadDocuments();
+            } catch (error) {
+                showAlert(`❌ Erro: ${error.message}`, 'error');
+            }
+        }
+        
+        function showAlert(message, type) {
+            const alert = document.getElementById('alert');
+            alert.textContent = message;
+            alert.className = `alert alert-${type}`;
+            alert.style.display = 'block';
+            setTimeout(() => alert.style.display = 'none', 5000);
+        }
+        
+        // Carregar documentos no início
+        document.addEventListener('DOMContentLoaded', loadDocuments);
+    </script>
+</body>
+</html>

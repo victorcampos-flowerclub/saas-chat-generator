@@ -331,3 +331,105 @@ if __name__ == '__main__':
     print(f"🤖 Modelo Claude: {Config.CLAUDE_MODEL}")
     
     app.run(debug=True, host='0.0.0.0', port=5000)
+
+# ================================
+# IMPORTS PARA KNOWLEDGE BASE
+# ================================
+from knowledge_base_system import knowledge_service
+import base64
+from datetime import datetime, timezone
+from google.cloud import bigquery
+
+# ================================
+# ROUTES DE KNOWLEDGE BASE
+# ================================
+
+@app.route('/api/chats/<chat_id>/documents', methods=['POST'])
+@jwt_required()
+def upload_document(chat_id):
+    """Upload de documento para o chat"""
+    try:
+        user_id = get_jwt_identity()
+        
+        # Verificar se o chat pertence ao usuário
+        chat = chat_model.get_chat_by_id(chat_id, user_id)
+        if not chat:
+            return jsonify({'success': False, 'error': 'Chat não encontrado'}), 404
+        
+        # Verificar se há arquivo
+        if 'file' not in request.files:
+            return jsonify({'success': False, 'error': 'Nenhum arquivo enviado'}), 400
+        
+        file = request.files['file']
+        if file.filename == '':
+            return jsonify({'success': False, 'error': 'Arquivo vazio'}), 400
+        
+        # Validar tipo de arquivo
+        allowed_types = [
+            'application/pdf',
+            'text/plain',
+            'text/markdown',
+            'application/json',
+            'text/csv'
+        ]
+        
+        if file.content_type not in allowed_types:
+            return jsonify({
+                'success': False, 
+                'error': f'Tipo de arquivo não suportado: {file.content_type}'
+            }), 400
+        
+        # Validar tamanho (máximo 10MB)
+        file_data = file.read()
+        if len(file_data) > 10 * 1024 * 1024:
+            return jsonify({'success': False, 'error': 'Arquivo muito grande (máximo 10MB)'}), 400
+        
+        # Upload do documento
+        result = knowledge_service.upload_document(
+            chat_id=chat_id,
+            file_data=file_data,
+            filename=file.filename,
+            content_type=file.content_type
+        )
+        
+        if result['success']:
+            return jsonify(result), 201
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+
+# ================================
+# KNOWLEDGE BASE IMPORTS
+# ================================
+try:
+    from knowledge_base_system import knowledge_service
+    KNOWLEDGE_BASE_ENABLED = True
+    print("✅ Knowledge Base habilitado")
+except ImportError as e:
+    KNOWLEDGE_BASE_ENABLED = False
+    print(f"⚠️ Knowledge Base não disponível: {e}")
+
+# ================================
+# KNOWLEDGE BASE ROUTES
+# ================================
+if KNOWLEDGE_BASE_ENABLED:
+    @app.route('/manage/<chat_id>')
+    def manage_chat_page(chat_id):
+        """Página de gerenciamento do chat"""
+        return render_template('manage_chat.html', chat_id=chat_id)
+        
+    @app.route('/api/chats/<chat_id>/documents', methods=['GET'])
+    @jwt_required()
+    def list_chat_documents(chat_id):
+        """Listar documentos do chat"""
+        try:
+            user_id = get_jwt_identity()
+            chat = chat_model.get_chat_by_id(chat_id, user_id)
+            if not chat:
+                return jsonify({'success': False, 'error': 'Chat não encontrado'}), 404
+            
+            documents = knowledge_service.get_chat_documents(chat_id)
+            return jsonify({'success': True, 'documents': documents}), 200
+        except Exception as e:
+            return jsonify({'success': False, 'error': str(e)}), 500
