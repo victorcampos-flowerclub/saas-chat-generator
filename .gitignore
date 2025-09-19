@@ -1,31 +1,17 @@
-# Secrets e API keys
-*api-key*
-*secret*
-*.env*
-.env
-.env.*
-
-# Backups
-*.backup*
-*backup*
-*.bak
-*.tmp
-*temp*
-
-# Logs
+node_modules/
+package-lock.json
+npm-debug.log*
+.env*
 *.log
 logs/
-
-# Python
+.npm
+.cache/
 __pycache__/
 *.pyc
-*.pyo
-
-# Sistema
 .DS_Store
-Thumbs.db
-
-# Outros
-*.swp
-*.swo
-*~
+.vscode/
+.idea/
+.wwebjs_auth/
+.wwebjs_cache/
+*.backup*
+*.tmp
