@@ -1,0 +1,37 @@
+{
+  "chat_name": "Secretária Dra. Maria Santos",
+  "chat_type": "medical_secretary",
+  "personality": "friendly",
+  "agent_configuration": {
+    "business_type": "clinica",
+    "business_name": "Clínica Santos Cardiologia",
+    "doctor_name": "Dra. Maria Santos",
+    "specialty": "Cardiologia",
+    "service_types": ["online", "presencial"],
+    "services": [
+      {
+        "natureza": "Consultas",
+        "nome": "Consulta Presencial",
+        "valor": "R$ 450,00"
+      },
+      {
+        "natureza": "Consultas",
+        "nome": "Consulta Online",
+        "valor": "R$ 350,00"
+      },
+      {
+        "natureza": "Exames",
+        "nome": "Eletrocardiograma",
+        "valor": "R$ 120,00"
+      }
+    ],
+    "address": "Rua Cardoso de Almeida, 456 - Perdizes - São Paulo/SP - CEP 05013-001",
+    "payment_methods": ["pix", "cartao_credito", "parcelamento"],
+    "health_plans": "Unimed, Amil, SulAmérica, Bradesco Saúde",
+    "scheduling_url": "https://agendarconsulta.com/perfil/dra-maria-santos",
+    "working_hours": "Segunda a Sexta: 8h às 17h",
+    "emergency_contact": "(11) 99999-1234",
+    "secretary_name": "Carla"
+  },
+  "use_ai_prompt": true
+}
