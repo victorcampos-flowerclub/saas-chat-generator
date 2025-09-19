@@ -10,4 +10,5 @@ COPY . .
 ENV PORT=8080
 EXPOSE 8080
 
-CMD exec gunicorn --bind :$PORT --workers 1 --worker-class gevent --timeout 60 app:app
+# SEM gevent - threads normais
+CMD exec gunicorn --bind :$PORT --workers 1 --timeout 60 app:app

@@ -1,6 +1,5 @@
-from ai_prompt_improved import improved_ai_generator
 """
-Backend principal do SaaS Chat Generator
+Backend principal do SaaS Chat Generator - VERSÃO LIMPA E FUNCIONAL
 """
 
 import os
@@ -10,6 +9,8 @@ from flask_cors import CORS
 from flask_jwt_extended import JWTManager, jwt_required, get_jwt_identity
 from datetime import timedelta
 import json
+import uuid
+import requests
 
 # Adicionar o diretório pai ao path para imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -17,7 +18,6 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from config import Config
 from auth.auth_service import auth_service
 from models.database import user_model, chat_model, message_model
-import uuid
 
 # Inicializar Flask
 app = Flask(__name__)
@@ -32,8 +32,10 @@ app.config['JWT_SECRET_KEY'] = Config.JWT_SECRET_KEY
 app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(hours=24)
 
 # ================================
-# KNOWLEDGE BASE IMPORTS
+# INTEGRAÇÃO COM SISTEMAS
 # ================================
+
+# Knowledge Base
 try:
     from knowledge_base_system import knowledge_service
     KNOWLEDGE_BASE_ENABLED = True
@@ -41,6 +43,18 @@ try:
 except ImportError as e:
     KNOWLEDGE_BASE_ENABLED = False
     print(f"⚠️ Knowledge Base não disponível: {e}")
+
+# AI Prompt Generator
+try:
+    from ai_prompt_generator import ai_prompt_generator
+    AI_PROMPT_ENABLED = True
+    print("✅ AI Prompt Generator habilitado")
+except ImportError as e:
+    AI_PROMPT_ENABLED = False
+    print(f"⚠️ AI Prompt Generator não disponível: {e}")
+
+# Chat Engine URL
+CHAT_ENGINE_URL = "https://saas-chat-engine-365442086139.us-east1.run.app"
 
 # ================================
 # ROUTES DE AUTENTICAÇÃO
@@ -160,7 +174,7 @@ def get_user_chats():
 @app.route('/api/chats', methods=['POST'])
 @jwt_required()
 def create_chat():
-    """Criar novo chat com processamento automático de documentos"""
+    """Criar novo chat"""
     try:
         user_id = get_jwt_identity()
         data = request.get_json()
@@ -192,50 +206,11 @@ def create_chat():
                 'error': f'Limite de {max_chats} chats atingido para o plano {user["plan"]}'
             }), 403
         
-        # Determinar o system_prompt
+        # System prompt padrão se não fornecido
         system_prompt = data.get('system_prompt', '')
-        
-        # Se não tem prompt ou é muito simples, gerar com IA (se disponível)
-        if (not system_prompt or len(system_prompt.strip()) < 50) and AI_PROMPT_ENABLED:
-            print("🤖 Gerando prompt automático com IA...")
-            try:
-                # Criar chat temporário para análise
-                temp_chat_id = str(uuid.uuid4())
-                
-                # Se há documentos, analisar
-                chat_config = {
-                    'chat_name': data['chat_name'],
-                    'chat_type': data['chat_type'],
-                    'personality': data.get('personality', 'professional'),
-                    'chat_description': data.get('chat_description', '')
-                }
-                
-                # Buscar documentos se foi fornecido um temp_chat_id
-                temp_chat_from_frontend = data.get('temp_chat_id')
-                if temp_chat_from_frontend and KNOWLEDGE_BASE_ENABLED:
-                    documents_analysis = ai_prompt_generator.analyze_documents(temp_chat_from_frontend)
-                else:
-                    documents_analysis = ai_prompt_generator._default_analysis()
-                
-                # Gerar prompt otimizado
-                generated_prompt = ai_prompt_generator.generate_optimized_prompt(
-                    chat_config=chat_config,
-                    documents_analysis=documents_analysis
-                )
-                
-                if generated_prompt and len(generated_prompt.strip()) > 20:
-                    system_prompt = generated_prompt
-                    print("✅ Prompt gerado automaticamente com IA")
-                else:
-                    system_prompt = f"Você é um assistente {data.get('personality', 'professional')} especializado em {data['chat_type']}."
-                    
-            except Exception as e:
-                print(f"⚠️ Erro ao gerar prompt com IA: {e}")
-                system_prompt = f"Você é um assistente {data.get('personality', 'professional')} especializado em {data['chat_type']}."
-        
-        # Se ainda não tem prompt, usar padrão
         if not system_prompt:
-            system_prompt = f"Você é um assistente {data.get('personality', 'professional')} especializado em {data['chat_type']}."
+            personality = data.get('personality', 'professional')
+            system_prompt = f"Você é um assistente {personality} especializado em {data['chat_type']}."
         
         # Criar chat
         chat = chat_model.create_chat(
@@ -249,22 +224,10 @@ def create_chat():
         )
         
         if chat:
-            # Se havia documentos em chat temporário, transferir
-            temp_chat_from_frontend = data.get('temp_chat_id')
-            if temp_chat_from_frontend and KNOWLEDGE_BASE_ENABLED:
-                try:
-                    # Transferir documentos do chat temporário para o chat real
-                    transfer_result = transfer_temp_documents(temp_chat_from_frontend, chat['chat_id'], user_id)
-                    if transfer_result.get('transferred', 0) > 0:
-                        print(f"✅ {transfer_result['transferred']} documentos transferidos")
-                except Exception as e:
-                    print(f"⚠️ Erro ao transferir documentos: {e}")
-            
             return jsonify({
                 'success': True,
                 'message': 'Chat criado com sucesso',
-                'chat': chat,
-                'prompt_generated_by_ai': len(data.get('system_prompt', '').strip()) < 50
+                'chat': chat
             }), 201
         else:
             return jsonify({
@@ -277,46 +240,6 @@ def create_chat():
             'success': False,
             'error': f'Erro interno: {str(e)}'
         }), 500
-
-def transfer_temp_documents(temp_chat_id, real_chat_id, user_id):
-    """Transferir documentos de chat temporário para chat real"""
-    try:
-        if not KNOWLEDGE_BASE_ENABLED:
-            return {'transferred': 0}
-            
-        # Buscar documentos do chat temporário
-        temp_docs = knowledge_service.get_chat_documents(temp_chat_id)
-        
-        if not temp_docs:
-            return {'transferred': 0}
-        
-        # Atualizar chat_id dos documentos
-        from google.cloud import bigquery
-        
-        update_query = """
-        UPDATE `flower-ai-generator.saas_chat_generator.chat_documents`
-        SET chat_id = @real_chat_id, user_id = @user_id
-        WHERE chat_id = @temp_chat_id
-        """
-        
-        job_config = bigquery.QueryJobConfig(
-            query_parameters=[
-                bigquery.ScalarQueryParameter("real_chat_id", "STRING", real_chat_id),
-                bigquery.ScalarQueryParameter("temp_chat_id", "STRING", temp_chat_id),
-                bigquery.ScalarQueryParameter("user_id", "STRING", user_id)
-            ]
-        )
-        
-        job = knowledge_service.bigquery_client.query(update_query, job_config=job_config)
-        job.result()
-        
-        return {'transferred': len(temp_docs)}
-        
-    except Exception as e:
-        print(f"Erro ao transferir documentos: {e}")
-        return {'transferred': 0}
-
-import uuid
 
 @app.route('/api/chats/<chat_id>', methods=['GET'])
 @jwt_required()
@@ -344,15 +267,77 @@ def get_chat(chat_id):
         }), 500
 
 # ================================
+# AI PROMPT GENERATOR - INTEGRAÇÃO SIMPLES
+# ================================
+
+@app.route('/api/chats/<chat_id>/generate-prompt', methods=['POST'])
+@jwt_required()
+def generate_ai_prompt(chat_id):
+    """Gerar prompt otimizado com IA - PROXY para chat-engine"""
+    try:
+        user_id = get_jwt_identity()
+        data = request.get_json()
+        
+        # Verificar se o chat pertence ao usuário
+        chat = chat_model.get_chat_by_id(chat_id, user_id)
+        if not chat:
+            return jsonify({'success': False, 'error': 'Chat não encontrado'}), 404
+        
+        # Fazer proxy para chat-engine
+        chat_engine_url = f"{CHAT_ENGINE_URL}/api/generate-master-prompt/{chat_id}"
+        
+        # Preparar dados para chat-engine
+        payload = {
+            'chat_name': data.get('chat_name', chat.get('chat_name')),
+            'chat_type': data.get('chat_type', chat.get('chat_type')),
+            'personality': data.get('personality', chat.get('personality', 'professional')),
+            'business_context': data.get('business_context', '')
+        }
+        
+        # Chamar chat-engine
+        try:
+            response = requests.post(
+                chat_engine_url,
+                json=payload,
+                timeout=30,
+                headers={'Content-Type': 'application/json'}
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                
+                # Atualizar system_prompt do chat se solicitado
+                if data.get('update_chat', False) and result.get('success'):
+                    new_prompt = result.get('master_prompt')
+                    if new_prompt:
+                        chat_model.update_chat_prompt(chat_id, user_id, new_prompt)
+                
+                return jsonify(result), 200
+            else:
+                return jsonify({
+                    'success': False,
+                    'error': f'Erro no chat-engine: {response.status_code}',
+                    'fallback_prompt': f"Você é um assistente {payload['personality']} especializado em {payload['chat_type']}."
+                }), 500
+                
+        except requests.RequestException as e:
+            return jsonify({
+                'success': False,
+                'error': f'Erro de conexão com chat-engine: {str(e)}',
+                'fallback_prompt': f"Você é um assistente {payload['personality']} especializado em {payload['chat_type']}."
+            }), 500
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': f'Erro interno: {str(e)}'
+        }), 500
+
+# ================================
 # ROUTES DE KNOWLEDGE BASE
 # ================================
 
 if KNOWLEDGE_BASE_ENABLED:
-    @app.route('/manage/<chat_id>')
-    def manage_chat_page(chat_id):
-        """Página de gerenciamento do chat"""
-        return render_template('manage_chat.html', chat_id=chat_id)
-        
     @app.route('/api/chats/<chat_id>/documents', methods=['GET'])
     @jwt_required()
     def list_chat_documents(chat_id):
@@ -425,56 +410,6 @@ if KNOWLEDGE_BASE_ENABLED:
         except Exception as e:
             return jsonify({'success': False, 'error': str(e)}), 500
 
-    @app.route('/api/chats/<chat_id>/documents/github', methods=['POST'])
-    @jwt_required()
-    def import_github_content(chat_id):
-        """Importar conteúdo do GitHub"""
-        try:
-            user_id = get_jwt_identity()
-            data = request.get_json()
-            
-            # Verificar se o chat pertence ao usuário
-            chat = chat_model.get_chat_by_id(chat_id, user_id)
-            if not chat:
-                return jsonify({'success': False, 'error': 'Chat não encontrado'}), 404
-            
-            github_url = data.get('github_url')
-            if not github_url:
-                return jsonify({'success': False, 'error': 'URL do GitHub obrigatória'}), 400
-            
-            # Importar conteúdo
-            result = knowledge_service.fetch_github_content(chat_id, github_url)
-            
-            if result['success']:
-                return jsonify(result), 201
-            else:
-                return jsonify(result), 500
-                
-        except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
-
-    @app.route('/api/chats/<chat_id>/documents/<document_id>', methods=['DELETE'])
-    @jwt_required()
-    def delete_document(chat_id, document_id):
-        """Deletar documento"""
-        try:
-            user_id = get_jwt_identity()
-            
-            # Verificar se o chat pertence ao usuário
-            chat = chat_model.get_chat_by_id(chat_id, user_id)
-            if not chat:
-                return jsonify({'success': False, 'error': 'Chat não encontrado'}), 404
-            
-            result = knowledge_service.delete_document(document_id, chat_id)
-            
-            if result['success']:
-                return jsonify(result), 200
-            else:
-                return jsonify(result), 500
-                
-        except Exception as e:
-            return jsonify({'success': False, 'error': str(e)}), 500
-
 # ================================
 # ROUTES DO SISTEMA
 # ================================
@@ -484,12 +419,15 @@ def index():
     """Página inicial"""
     return jsonify({
         'system': 'SaaS Chat Generator',
-        'version': '1.0.0',
+        'version': '1.3.0',
         'status': 'operational',
+        'ai_prompt_enabled': AI_PROMPT_ENABLED,
+        'knowledge_base_enabled': KNOWLEDGE_BASE_ENABLED,
+        'chat_engine_url': CHAT_ENGINE_URL,
         'endpoints': {
             'auth': '/api/auth/*',
             'chats': '/api/chats/*',
-            'admin': '/api/admin/*'
+            'ai_prompts': '/api/chats/{chat_id}/generate-prompt'
         }
     })
 
@@ -505,6 +443,8 @@ def health():
             'status': 'healthy',
             'database': 'connected',
             'knowledge_base': KNOWLEDGE_BASE_ENABLED,
+            'ai_prompt': AI_PROMPT_ENABLED,
+            'chat_engine': CHAT_ENGINE_URL,
             'timestamp': Config.CLAUDE_MODEL
         }), 200
         
@@ -572,222 +512,6 @@ if __name__ == '__main__':
     print(f"📊 Projeto: {Config.PROJECT_ID}")
     print(f"🗄️ Dataset: {Config.BIGQUERY_DATASET}")
     print(f"🤖 Modelo Claude: {Config.CLAUDE_MODEL}")
+    print(f"🔗 Chat Engine: {CHAT_ENGINE_URL}")
     
     app.run(debug=True, host='0.0.0.0', port=5000)
-@app.route('/api/test/chat/<chat_id>', methods=['POST'])
-@jwt_required()
-def test_chat_with_documents(chat_id):
-    """Teste simples de chat com documentos"""
-    try:
-        user_id = get_jwt_identity()
-        data = request.get_json()
-        user_message = data.get('message', '').strip()
-        
-        if not user_message:
-            return jsonify({'success': False, 'error': 'Mensagem vazia'}), 400
-        
-        # Buscar contexto dos documentos
-        if KNOWLEDGE_BASE_ENABLED:
-            context = knowledge_service.get_chat_knowledge_context(
-                chat_id=chat_id, 
-                query_text=user_message,
-                max_docs=3
-            )
-            
-            return jsonify({
-                'success': True,
-                'message': user_message,
-                'context_found': bool(context),
-                'context_preview': context[:500] + '...' if len(context) > 500 else context,
-                'documents_count': len(context.split('📄')) - 1 if context else 0
-            })
-        else:
-            return jsonify({'success': False, 'error': 'Knowledge Base não habilitado'})
-            
-    except Exception as e:
-        return jsonify({'success': False, 'error': str(e)}), 500
-
-# ================================
-# AI PROMPT GENERATOR
-# ================================
-
-try:
-    from ai_prompt_generator import ai_prompt_generator
-    AI_PROMPT_ENABLED = True
-    print("✅ AI Prompt Generator habilitado")
-except ImportError as e:
-    AI_PROMPT_ENABLED = False
-    print(f"⚠️ AI Prompt Generator não disponível: {e}")
-
-@app.route('/api/chats/<chat_id>/generate-prompt', methods=['POST'])
-@jwt_required()
-def generate_ai_prompt(chat_id):
-    """Gerar prompt otimizado com IA baseado nos documentos"""
-    try:
-        if not AI_PROMPT_ENABLED:
-            return jsonify({
-                'success': False,
-                'error': 'AI Prompt Generator não disponível'
-            }), 500
-            
-        user_id = get_jwt_identity()
-        data = request.get_json()
-        
-        # Verificar se o chat pertence ao usuário
-        chat = chat_model.get_chat_by_id(chat_id, user_id)
-        if not chat:
-            return jsonify({'success': False, 'error': 'Chat não encontrado'}), 404
-        
-        # Configuração do chat
-        chat_config = {
-            'chat_name': data.get('chat_name', chat.get('chat_name')),
-            'chat_type': data.get('chat_type', chat.get('chat_type')),
-            'personality': data.get('personality', chat.get('personality')),
-            'chat_description': data.get('chat_description', '')
-        }
-        
-        # Analisar documentos
-        documents_analysis = ai_prompt_generator.analyze_documents(chat_id)
-        
-        # Gerar prompt otimizado
-        optimized_prompt = ai_prompt_generator.generate_optimized_prompt(
-            chat_config=chat_config,
-            documents_analysis=documents_analysis
-        )
-        
-        return jsonify({
-            'success': True,
-            'optimized_prompt': optimized_prompt,
-            'analysis': documents_analysis,
-            'message': 'Prompt gerado com sucesso!'
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'Erro interno: {str(e)}'
-        }), 500
-
-@app.route('/api/chats/<chat_id>/analyze-documents', methods=['GET'])
-@jwt_required()
-def analyze_chat_documents(chat_id):
-    """Analisar documentos do chat"""
-    try:
-        if not AI_PROMPT_ENABLED:
-            return jsonify({
-                'success': False,
-                'error': 'AI Prompt Generator não disponível'
-            }), 500
-            
-        user_id = get_jwt_identity()
-        
-        # Verificar se o chat pertence ao usuário
-        chat = chat_model.get_chat_by_id(chat_id, user_id)
-        if not chat:
-            return jsonify({'success': False, 'error': 'Chat não encontrado'}), 404
-        
-        # Analisar documentos
-        analysis = ai_prompt_generator.analyze_documents(chat_id)
-        
-        return jsonify({
-            'success': True,
-            'analysis': analysis
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'Erro interno: {str(e)}'
-        }), 500
-
-@app.route('/api/chats/temp', methods=['POST'])
-@jwt_required()
-def create_temp_chat():
-    """Criar chat temporário para upload de documentos"""
-    try:
-        user_id = get_jwt_identity()
-        
-        # Criar chat temporário
-        temp_chat_id = str(uuid.uuid4())
-        temp_chat = chat_model.create_chat(
-            user_id=user_id,
-            chat_name=f"temp_{temp_chat_id[:8]}",
-            chat_type="temp",
-            system_prompt="Chat temporário para upload",
-            personality="professional",
-            claude_model=Config.CLAUDE_MODEL,
-            max_tokens=1500
-        )
-        
-        if temp_chat:
-            return jsonify({
-                'success': True,
-                'temp_chat_id': temp_chat['chat_id'],
-                'message': 'Chat temporário criado'
-            }), 201
-        else:
-            return jsonify({
-                'success': False,
-                'error': 'Erro ao criar chat temporário'
-            }), 500
-            
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'Erro interno: {str(e)}'
-        }), 500
-
-@app.route('/api/chats/temp/<temp_chat_id>', methods=['DELETE'])
-@jwt_required()
-def cleanup_temp_chat(temp_chat_id):
-    """Limpar chat temporário não usado"""
-    try:
-        user_id = get_jwt_identity()
-        
-        # Verificar se é do usuário
-        chat = chat_model.get_chat_by_id(temp_chat_id, user_id)
-        if not chat or chat.get('chat_type') != 'temp':
-            return jsonify({'success': False, 'error': 'Chat temporário não encontrado'}), 404
-        
-        # Deletar documentos do chat temporário
-        if KNOWLEDGE_BASE_ENABLED:
-            try:
-                temp_docs = knowledge_service.get_chat_documents(temp_chat_id)
-                for doc in temp_docs:
-                    knowledge_service.delete_document(doc['document_id'], temp_chat_id)
-            except Exception as e:
-                print(f"Erro ao limpar documentos temporários: {e}")
-        
-        # Deletar chat temporário do BigQuery
-        try:
-            from google.cloud import bigquery
-            delete_query = """
-            UPDATE `flower-ai-generator.saas_chat_generator.chats`
-            SET status = 'deleted'
-            WHERE chat_id = @chat_id AND user_id = @user_id AND chat_type = 'temp'
-            """
-            
-            job_config = bigquery.QueryJobConfig(
-                query_parameters=[
-                    bigquery.ScalarQueryParameter("chat_id", "STRING", temp_chat_id),
-                    bigquery.ScalarQueryParameter("user_id", "STRING", user_id)
-                ]
-            )
-            
-            job = chat_model.bigquery_client.query(delete_query, job_config=job_config)
-            job.result()
-            
-        except Exception as e:
-            print(f"Erro ao deletar chat temporário: {e}")
-        
-        return jsonify({
-            'success': True,
-            'message': 'Chat temporário limpo'
-        }), 200
-        
-    except Exception as e:
-        return jsonify({
-            'success': False,
-            'error': f'Erro interno: {str(e)}'
-        }), 500
-
