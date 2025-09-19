@@ -3,8 +3,9 @@ Chat Engine MÍNIMO + Knowledge Base
 """
 
 import os
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from flask_cors import CORS
+import logging
 import requests
 from datetime import datetime
 
@@ -315,7 +316,113 @@ def send_message(chat_id):
     except Exception as e:
         return {"success": False, "error": str(e)}, 500
 
+
+@app.route('/api/generate-master-prompt/<chat_id>', methods=['POST'])
+def generate_master_prompt(chat_id):
+    """Endpoint dedicado para gerar prompt master baseado nos documentos do chat"""
+    try:
+        data = request.get_json()
+        chat_config = {
+            'chat_name': data.get('chat_name', ''),
+            'chat_type': data.get('chat_type', 'support'),
+            'personality': data.get('personality', 'professional'),
+            'business_context': data.get('business_context', '')
+        }
+        
+        # Buscar documentos do chat
+        documents_context = get_knowledge_context(chat_id, "análise completa")
+        
+        if not documents_context:
+            return jsonify({
+                'error': 'Nenhum documento encontrado para este chat',
+                'fallback_prompt': generate_fallback_prompt(chat_config)
+            }), 400
+        
+        # Gerar prompt master com IA
+        master_prompt = create_master_prompt_with_ai(chat_config, documents_context)
+        
+        return jsonify({
+            'success': True,
+            'master_prompt': master_prompt,
+            'chat_config': chat_config
+        })
+        
+    except Exception as e:
+        print(f"Erro ao gerar prompt master: {e}")
+        return jsonify({
+            'error': str(e),
+            'fallback_prompt': generate_fallback_prompt(chat_config)
+        }), 500
+
+def create_master_prompt_with_ai(chat_config, documents_context):
+    """Cria prompt master usando Claude"""
+    api_key = get_claude_api_key()
+    
+    analysis_prompt = f"""MISSÃO: Criar PROMPT DE SISTEMA MASTER para assistente virtual.
+
+CHAT: {chat_config['chat_name']} - {chat_config['chat_type']} - {chat_config['personality']}
+
+DOCUMENTOS:
+{documents_context[:5000]}
+
+INSTRUÇÕES:
+1. Comportar-se como HUMANO real (nunca mencionar IA)
+2. Identidade clara baseada nos documentos
+3. Conhecer profundamente o negócio
+4. Responder natural, conciso, profissional
+5. NUNCA mencionar "documentos" ou "arquivos"
+
+Retorne APENAS o prompt de sistema."""
+
+    try:
+        response = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={
+                "Content-Type": "application/json",
+                "x-api-key": api_key,
+                "anthropic-version": "2023-06-01"
+            },
+            json={
+                "model": "claude-3-5-sonnet-20241022",
+                "max_tokens": 1500,
+                "messages": [{"role": "user", "content": analysis_prompt}]
+            },
+            timeout=45
+        )
+        
+        if response.status_code == 200:
+            result = response.json()
+            return result['content'][0]['text'].strip()
+        else:
+            return generate_fallback_prompt(chat_config)
+            
+    except Exception as e:
+        print(f"Claude API error: {e}")
+        return generate_fallback_prompt(chat_config)
+
+def generate_fallback_prompt(chat_config):
+    """Prompt básico caso falhe"""
+    personality_desc = {
+        'friendly': 'amigável',
+        'professional': 'profissional', 
+        'casual': 'descontraído',
+        'formal': 'formal'
+    }.get(chat_config['personality'], 'profissional')
+    
+    return f"Sou um assistente {personality_desc} especializado em {chat_config['chat_type']}. Estou aqui para ajudar de forma natural e eficiente."
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
     print(f"🚀 Starting Chat Engine + Knowledge Base on port {port}")
     app.run(host='0.0.0.0', port=port, debug=False)
+
+@app.route('/debug/knowledge/<chat_id>')
+def debug_knowledge(chat_id):
+    """Debug: verificar se knowledge context funciona"""
+    context = get_knowledge_context(chat_id, "teste debug")
+    return {
+        'chat_id': chat_id,
+        'has_context': bool(context),
+        'context_length': len(context) if context else 0,
+        'context_preview': context[:200] if context else "VAZIO"
+    }

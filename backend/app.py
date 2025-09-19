@@ -1,3 +1,4 @@
+from ai_prompt_improved import improved_ai_generator
 """
 Backend principal do SaaS Chat Generator
 """
