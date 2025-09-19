@@ -355,49 +355,70 @@ def generate_master_prompt(chat_id):
         }), 500
 
 def create_master_prompt_with_ai(chat_config, documents_context):
-    """Cria prompt master usando Claude"""
+    """Cria prompt master usando Claude - MESMA ESTRUTURA DO /api/send"""
     api_key = get_claude_api_key()
     
-    analysis_prompt = f"""MISSÃO: Criar PROMPT DE SISTEMA MASTER para assistente virtual.
+    if not api_key:
+        print("API key não disponível")
+        return generate_fallback_prompt(chat_config)
+    
+    analysis_prompt = f"""Você é um especialista em criação de prompts para assistentes virtuais.
 
-CHAT: {chat_config['chat_name']} - {chat_config['chat_type']} - {chat_config['personality']}
+MISSÃO: Criar um PROMPT DE SISTEMA MASTER para um assistente virtual.
 
-DOCUMENTOS:
-{documents_context[:5000]}
+CONFIGURAÇÃO DO CHAT:
+- Nome: {chat_config['chat_name']}
+- Tipo: {chat_config['chat_type']}
+- Personalidade: {chat_config['personality']}
 
-INSTRUÇÕES:
-1. Comportar-se como HUMANO real (nunca mencionar IA)
-2. Identidade clara baseada nos documentos
-3. Conhecer profundamente o negócio
-4. Responder natural, conciso, profissional
-5. NUNCA mencionar "documentos" ou "arquivos"
+DOCUMENTOS DO NEGÓCIO:
+{documents_context}
 
-Retorne APENAS o prompt de sistema."""
+INSTRUÇÕES PARA O PROMPT MASTER:
+1. O assistente deve se comportar como um HUMANO real (nunca mencionar que é IA)
+2. Deve ter uma identidade clara baseada nos documentos
+3. Deve conhecer profundamente o negócio/contexto dos documentos
+4. Deve responder de forma natural, concisa e profissional
+5. NUNCA mencionar "de acordo com os documentos" ou similar
+6. Deve fluir naturalmente como se fosse especialista no assunto
+
+Retorne APENAS o prompt de sistema, sem explicações adicionais."""
+
+    headers = {
+        "Content-Type": "application/json",
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01"
+    }
+    
+    claude_data = {
+        "model": "claude-3-haiku-20240307",
+        "max_tokens": 1000,
+        "messages": [
+            {"role": "user", "content": f"Sistema: {analysis_prompt}"},
+            {"role": "assistant", "content": "Entendido! Vou criar o prompt master."},
+            {"role": "user", "content": "Crie o prompt master agora."}
+        ]
+    }
 
     try:
         response = requests.post(
             "https://api.anthropic.com/v1/messages",
-            headers={
-                "Content-Type": "application/json",
-                "x-api-key": api_key,
-                "anthropic-version": "2023-06-01"
-            },
-            json={
-                "model": "claude-3-5-sonnet-20241022",
-                "max_tokens": 1500,
-                "messages": [{"role": "user", "content": analysis_prompt}]
-            },
-            timeout=45
+            headers=headers,
+            json=claude_data,
+            timeout=30
         )
         
         if response.status_code == 200:
             result = response.json()
-            return result['content'][0]['text'].strip()
+            generated_prompt = result['content'][0]['text'].strip()
+            print(f"✅ Prompt master gerado com sucesso ({len(generated_prompt)} chars)")
+            return generated_prompt
         else:
+            print(f"❌ Claude API error: {response.status_code}")
             return generate_fallback_prompt(chat_config)
             
     except Exception as e:
-        print(f"Claude API error: {e}")
+        print(f"❌ Erro ao chamar Claude API: {e}")
         return generate_fallback_prompt(chat_config)
 
 def generate_fallback_prompt(chat_config):
